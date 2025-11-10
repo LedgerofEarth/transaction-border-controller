@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "src/tbc_gateway",
+    "src/controller",
     "src/coreprover",
 ]
 

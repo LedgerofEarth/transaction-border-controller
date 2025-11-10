@@ -2,7 +2,7 @@ project:
   name: Transaction Border Controller (TBC)
   description: Monorepo containing TGP/TxIP/X402-EXT specifications and a Rust reference implementation of the TBC and CoreProver components.
   context_paths:
-    - ./specs
+    - ./spec
     - ./src
     - ./docs
   default_goal: Maintain coherence between specifications and implementation.

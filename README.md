@@ -38,7 +38,7 @@ Session Border Controller in telecom architecture.
 cargo build
 
 # Run the controller (development mode)
-cargo run —package controller
+cargo run --package controller
 
 # Run tests
-cargo test —workspace
+cargo test --workspace

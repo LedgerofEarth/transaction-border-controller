@@ -2,6 +2,6 @@
 
 Deployment patterns:
 
-- Single-gateway (local routing)
-- Multi-gateway (federated settlement)
+- Single-controller deployment (local routing)
+- Multi-controller (federated settlement)
 - Carrier and datacenter edge deployments

@@ -2,7 +2,7 @@
 
 Describes major components:
 
-- TBC Gateway (control plane)
+- TBC Controller (control plane)
 - CoreProver (escrow middleware)
 - x402 Adapter
 - Telemetry and Policy subsystems

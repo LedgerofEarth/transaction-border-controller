@@ -37,8 +37,8 @@ Session Border Controller in telecom architecture.
 # Build everything
 cargo build
 
-# Run the gateway (development mode)
-cargo run —package tbc_gateway
+# Run the controller (development mode)
+cargo run —package controller
 
 # Run tests
 cargo test —workspace

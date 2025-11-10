@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "src/tbc_gateway",
+    "src/coreprover",
+]
+
+resolver = "2"
+
+[workspace.package]
+edition = "2021"

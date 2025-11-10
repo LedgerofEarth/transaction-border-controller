@@ -1,0 +1,10 @@
+[package]
+name = "coreprover"
+version = "0.1.0"
+edition = "2021"
+license = "BUSL-1.1"
+description = "CoreProver library for escrow and proof-of-settlement receipts."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"

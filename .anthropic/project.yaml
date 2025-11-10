@@ -1,0 +1,16 @@
+project:
+  name: Transaction Border Controller (TBC)
+  description: Monorepo containing TGP/TxIP/X402-EXT specifications and a Rust reference implementation of the TBC and CoreProver components.
+  context_paths:
+    - ./specs
+    - ./src
+    - ./docs
+  default_goal: Maintain coherence between specifications and implementation.
+
+agents:
+  - name: SpecAgent
+    role: Maintain consistency among TxIP-00, TGP-00, X402-EXT, and implementation details.
+  - name: GatewayAgent
+    role: Assist with Rust gateway implementation, refactoring, and test coverage.
+  - name: ProofAgent
+    role: Design and validate CoreProver escrow logic and zero-knowledge receipts.

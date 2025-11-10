@@ -1,0 +1,4 @@
+Specification documents (TxIP-00, TGP-00, X402-EXT, appendices)
+are licensed under Creative Commons Attribution–ShareAlike 4.0 International
+(CC-BY-SA 4.0). This allows reuse and modification for interoperability and
+standards development with proper attribution.

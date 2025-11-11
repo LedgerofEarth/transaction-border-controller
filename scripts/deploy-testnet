@@ -1,0 +1,16 @@
+#!/bin/bash
+# Deploy to testnet
+
+set -e
+
+NETWORK=${1:-pulsechain-testnet}
+
+echo "Deploying to $NETWORK..."
+
+cd crates/coreprover-contracts
+forge script script/DeployTestnet.s.sol \
+    --rpc-url $RPC_URL \
+    --broadcast \
+    --verify
+
+echo "Deployment complete!"

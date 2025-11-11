@@ -1,0 +1,14 @@
+#!/bin/bash
+# Generate Rust bindings from Solidity contracts
+
+set -e
+
+echo "Generating contract bindings..."
+
+cd crates/coreprover-contracts
+forge build
+
+cd ../coreprover-bridge
+cargo build
+
+echo "Bindings generated successfully!"

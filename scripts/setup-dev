@@ -1,0 +1,20 @@
+#!/bin/bash
+# Development environment setup
+
+set -e
+
+echo "Setting up development environment..."
+
+# Start Anvil
+anvil --port 8545 &
+ANVIL_PID=$!
+
+# Wait for Anvil
+sleep 2
+
+# Deploy contracts
+cd crates/coreprover-contracts
+forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast
+
+echo "Development environment ready!"
+echo "Anvil PID: $ANVIL_PID"

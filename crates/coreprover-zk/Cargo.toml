@@ -10,6 +10,9 @@ tokio = { workspace = true }
 serde = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
+ethers = { workspace = true }
+alloy-primitives = { workspace = true, features = ["serde"] }
+sha2.workspace = true
 
 [dev-dependencies]
 proptest = { workspace = true }

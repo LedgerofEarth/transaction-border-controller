@@ -1,3 +1,4 @@
+use crate::types::receipt::Receipt;
 use coreprover_bridge::client::EscrowClient;
 use ethers::providers::{Http, Provider};
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-use coreprover_zk::{ZkBuyerInput, ZkSellerInput, ZkExchangeInput};
+use coreprover_zk::{ZkBuyerInput, ZkSellerInput};
 
 #[test]
 fn test_zk_buyer_input_serialization() {

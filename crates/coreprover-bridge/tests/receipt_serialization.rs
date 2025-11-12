@@ -1,19 +1,24 @@
-use coreprover_bridge::types::Receipt;
-use ethers::types::Address;
+//coreprover-bridge/src/tests/receipt_serialization
+use coreprover_bridge::types::receipt::Receipt;
+use ethers::types::{Address, H256};
 use serde_json;
 
 #[test]
 fn test_receipt_serialization_roundtrip() {
+    let buyer_address: Address = "0x0000000000000000000000000000000000000001".parse().unwrap();
+    let seller_address: Address = "0x0000000000000000000000000000000000000002".parse().unwrap();
+
     let receipt = Receipt {
-        buyer: "0x0000000000000000000000000000000000000001".parse::<Address>().unwrap(),
-        seller: "0x0000000000000000000000000000000000000002".parse::<Address>().unwrap(),
-        policy_hash: [0u8; 32],
+        receipt_id: H256::zero(),
+        buyer: buyer_address,
+        seller: seller_address,
+        amount: 1000,
+        timestamp: 1234567890,
+        policy_hash: H256::zero(),
     };
 
     let json = serde_json::to_string(&receipt).unwrap();
     let decoded: Receipt = serde_json::from_str(&json).unwrap();
 
-    assert_eq!(decoded.buyer, receipt.buyer);
-    assert_eq!(decoded.seller, receipt.seller);
-    assert_eq!(decoded.policy_hash, receipt.policy_hash);
+    assert_eq!(decoded, receipt);
 }

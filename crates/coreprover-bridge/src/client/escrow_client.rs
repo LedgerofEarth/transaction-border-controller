@@ -1,7 +1,7 @@
 //! High-level escrow client
 
 use crate::types::receipt::Receipt;
-use crate::types::escrow::{Escrow, EscrowState};
+use crate::types::escrow::{Escrow, EscrowState, EscrowMode};
 use anyhow::Result;
 use ethers::prelude::*;
 use ethers::types::{Address, H256, U256};
@@ -47,7 +47,7 @@ impl EscrowClient {
             order_id,
             buyer: self.buyer_address,
             seller,
-            buyer_amount: amount,
+            buyer_amount,
             seller_amount: 0,
             timestamp,
             policy_hash,
@@ -81,12 +81,13 @@ impl EscrowClient {
     /// Simulate fetching escrow (placeholder logic)
     pub async fn get_escrow(&self, order_id: [u8; 32]) -> Result<Escrow> {
         Ok(Escrow {
-            receipt_id: order_id,
+            order_id,
             buyer: self.buyer_address,
             seller: "0x0000000000000000000000000000000000000001".parse().unwrap(),
             buyer_amount: U256::from(42_000),
             seller_amount: U256::zero(),
             state: EscrowState::BuyerCommitted,
+            mode: EscrowMode::Purchase,
             created_at: chrono::Utc::now().timestamp() as u64,
         })
     }

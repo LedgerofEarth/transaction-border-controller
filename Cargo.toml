@@ -52,3 +52,4 @@ tower-http = { version = "0.5", features = ["trace", "cors"] }
 
 # Testing
 proptest = "1.4"
+clap = { version = "4.4", features = ["derive"] }

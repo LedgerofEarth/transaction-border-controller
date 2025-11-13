@@ -1,12 +1,9 @@
-# TGP Protocol Message Types
+//# TGP Protocol Message Types
+//
+//**Destination Path:** `crates/tbc-core/src/tgp/messages.rs`
+//
+//**Implementation:** M1 - TGP Message Parsing & Basic Routing
 
-**Destination Path:** `crates/tbc-core/src/tgp/messages.rs`
-
-**Implementation:** M1 - TGP Message Parsing & Basic Routing
-
------
-
-```rust
 //! TGP message types per TGP-00 specification
 //!
 //! This module implements the core message types for the Transaction Gateway Protocol (TGP-00).
@@ -62,7 +59,7 @@ use serde::{Deserialize, Serialize};
 /// let message = TGPMessage::Query(query);
 /// let json = serde_json::to_string(&message).unwrap();
 /// // JSON will contain: { "phase": "QUERY", ... }
-/// ```
+///
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "phase")]
 pub enum TGPMessage {
@@ -1134,7 +1131,7 @@ mod tests {
             query_id: "q-123".to_string(),
             asset: "USDC".to_string(),
             amount: 1000,
-            coreprover_contract: Some("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb".to_string()),
+            coreprover_contract: Some("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0".to_string()),
             session_id: Some("sess-123".to_string()),
             zk_required: true,
             economic_envelope: EconomicEnvelope {
@@ -1264,4 +1261,3 @@ mod tests {
         assert!(invalid.validate().is_err());
     }
 }
-```

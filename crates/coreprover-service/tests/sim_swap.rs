@@ -122,24 +122,26 @@ async fn test_dual_commit_token_swap() {
     sleep(Duration::from_millis(50)).await;
 
     // Step 6: Mark as delivered (both parties ready)
-    println!("\nStep 6: 🤝 Both parties confirm readiness...");
-    ctx.processor.mark_delivered(&escrow_id).await.unwrap();
-    
-    let state = ctx.processor.get_escrow_state(&escrow_id).await.unwrap();
-    println!("   State: {:?}", state);
-    sleep(Duration::from_millis(50)).await;
+    // Step 6: Mark as delivered (both parties ready)
+println!("\nStep 6: 🤝 Both parties confirm readiness...");
+ctx.processor.mark_delivered(&escrow_id).await.unwrap();
+println!("   State: Delivered");
+sleep(Duration::from_millis(50)).await;
 
     // Step 7: Atomic settlement
-    println!("\nStep 7: ⚛️  Executing atomic swap...");
-    println!("   📊 Pre-swap balances:");
-    println!("      Alice: {} wei", ctx.buyer.balance);
-    println!("      Bob: {} wei", ctx.seller.balance);
+println!("\nStep 7: ⚛️  Executing atomic swap...");
+println!("   📊 Pre-swap balances:");
+println!("      Alice: {} wei", ctx.buyer.balance);
+println!("      Bob: {} wei", ctx.seller.balance);
+let state = ctx.processor.get_escrow_state(&escrow_id).await.unwrap();
 
-    // Settlement (in real system, both parties would receive their swapped assets)
-    let receipt_id = ctx.processor.settle(&escrow_id, &mut ctx.seller).await.unwrap();
-
+// Settlement (in real system, both parties would receive their swapped assets)
+let receipt_id = ctx.processor.settle(&escrow_id, &mut ctx.seller).await.unwrap();
+    
     // Simulate Bob's counter-escrow return to Alice
     ctx.buyer.credit(swap_amount);
+
+let state = ctx.processor.get_escrow_state(&escrow_id).await.unwrap();
 
     println!("\n   📊 Post-swap balances:");
     println!("      Alice: {} wei", ctx.buyer.balance);

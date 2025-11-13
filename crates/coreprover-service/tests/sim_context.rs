@@ -24,7 +24,7 @@ pub struct SimUser {
 impl SimUser {
     pub fn new(name: &str, initial_balance: U256) -> Self {
         Self {
-            address: format!("0x{:040x}", name.as_bytes().iter().sum::<u8>()),
+            address: format!("0x{:040x}", name.as_bytes().iter().map(|&b| b as usize).sum::<usize>()),
             balance: initial_balance,
             nonce: 0,
         }

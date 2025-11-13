@@ -10,9 +10,11 @@ fn test_receipt_serialization_roundtrip() {
 
     let receipt = Receipt {
         receipt_id: H256::zero(),
+        order_id: H256::zero().into(),
         buyer: buyer_address,
         seller: seller_address,
-        amount: 1000,
+        buyer_amount: 1000,
+        seller_amount: 0,
         timestamp: 1234567890,
         policy_hash: H256::zero(),
     };

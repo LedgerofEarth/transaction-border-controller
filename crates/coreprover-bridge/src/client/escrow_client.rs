@@ -34,6 +34,20 @@ impl EscrowClient {
         let provider = Provider::<Http>::try_from(rpc_url)?;
         Ok(Self::new(Arc::new(provider), contract_address, Address::zero()))
     }
+    /// Simulate create escrow method
+        pub fn create_escrow(&self, seller: Address, amount: u64) -> Receipt {
+    let order_id = H256::zero().into();
+    Receipt {
+        receipt_id: H256::zero(),
+        order_id,
+        buyer: self.buyer_address,
+        seller,
+        buyer_amount: amount.into(),
+        seller_amount: 0u64.into(),
+        timestamp: chrono::Utc::now().timestamp() as u64,
+        policy_hash: H256::zero(),
+    }
+}
 
     /// Simulate creating an escrow receipt (purchase mode)
     pub fn create_purchase_receipt(&self, seller: Address, buyer_amount: u64) -> Receipt {

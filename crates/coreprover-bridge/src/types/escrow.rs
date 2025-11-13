@@ -2,6 +2,7 @@
 
 use ethers::prelude::*;
 use serde::{Deserialize, Serialize};
+use ethers::types::Address;
 
 /// Escrow state enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

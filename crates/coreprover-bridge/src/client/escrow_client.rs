@@ -35,7 +35,8 @@ impl EscrowClient {
         Ok(Self::new(Arc::new(provider), contract_address, Address::zero()))
     }
     /// Simulate create escrow method
-        pub fn create_escrow(&self, seller: Address, amount: u64) -> Receipt {
+        pub fn create_escrow(&self, seller: Address, amount: u6
+        ) -> Receipt {
     let order_id = H256::zero().into();
     Receipt {
         receipt_id: H256::zero(),

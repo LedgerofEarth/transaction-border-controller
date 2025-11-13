@@ -1,17 +1,20 @@
 //! High-level escrow client
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use crate::types::receipt::Receipt;
 use crate::types::escrow::{Escrow, EscrowState, EscrowMode};
 use anyhow::Result;
 use ethers::prelude::*;
 use ethers::types::{Address, H256, U256};
-use std::sync::Arc;
 
 /// Escrow client for interacting with CoreProverEscrow contract
 pub struct EscrowClient {
-pub provider: Arc<Provider<Http>>,
-pub contract_address: Address,
-pub buyer_address: Address,
+provider: Arc<Provider<Http>>,
+contract_address: Address,
+buyer_address: Address,
+// Storage for escrows
+escrows: Arc<Mutex<HashMap<H256, Escrow>>>,
 }
 
 impl EscrowClient {
@@ -25,6 +28,7 @@ Self {
 provider,
 contract_address,
 buyer_address,
+escrows: Arc::new(Mutex::new(HashMap::new())),
 }
 }
 
@@ -35,18 +39,35 @@ pub fn from_rpc(rpc_url: &str, contract_address: Address, buyer_address: Address
 }
 
 /// Simulate creating an escrow receipt (purchase mode)
-pub fn create_purchase_receipt(&self, seller: Address, buyer_amount: u64) -> Receipt {
-    let receipt_id = H256::random();
-    let order_id = receipt_id; // Use same H256 for consistency
+pub fn create_purchase_receipt(&self, seller: Address, amount: u64) -> Receipt {
+    let order_id = self.generate_order_id();
     let timestamp = chrono::Utc::now().timestamp() as u64;
     let policy_hash = H256::zero();
-
-    Receipt {
-        receipt_id,
+    
+    // Create and store the escrow
+    let escrow = Escrow {
         order_id,
         buyer: self.buyer_address,
         seller,
-        buyer_amount,
+        buyer_amount: U256::from(amount),
+        seller_amount: U256::zero(),
+        created_at: timestamp,
+        timestamp,
+        policy_hash,
+        state: EscrowState::BuyerCommitted,
+        mode: EscrowMode::Purchase,
+    };
+    
+    // Store escrow for later retrieval
+    self.escrows.lock().unwrap().insert(order_id, escrow);
+    
+    // Return receipt
+    Receipt {
+        receipt_id: order_id,  // Use order_id as receipt_id
+        order_id,
+        buyer: self.buyer_address,
+        seller,
+        buyer_amount: amount,
         seller_amount: 0,
         timestamp,
         policy_hash,
@@ -54,24 +75,36 @@ pub fn create_purchase_receipt(&self, seller: Address, buyer_amount: u64) -> Rec
 }
 
 /// Simulate creating a swap receipt
-pub fn create_swap_receipt(
-    &self,
-    seller: Address,
-    buyer_amount: u64,
-    seller_amount: u64,
-) -> Receipt {
-    let receipt_id = H256::random();
-    let order_id = receipt_id;
+pub fn create_swap_receipt(&self, seller: Address, buyer_amt: u64, seller_amt: u64) -> Receipt {
+    let order_id = self.generate_order_id();
     let timestamp = chrono::Utc::now().timestamp() as u64;
     let policy_hash = H256::zero();
-
-    Receipt {
-        receipt_id,
+    
+    // Create and store the escrow
+    let escrow = Escrow {
         order_id,
         buyer: self.buyer_address,
         seller,
-        buyer_amount,
-        seller_amount,
+        buyer_amount: U256::from(buyer_amt),
+        seller_amount: U256::from(seller_amt),
+        created_at: timestamp,
+        timestamp,
+        policy_hash,
+        state: EscrowState::BuyerCommitted,
+        mode: EscrowMode::Swap,
+    };
+    
+    // Store escrow for later retrieval
+    self.escrows.lock().unwrap().insert(order_id, escrow);
+    
+    // Return receipt
+    Receipt {
+        receipt_id: order_id,  // Use order_id as receipt_id
+        order_id,
+        buyer: self.buyer_address,
+        seller,
+        buyer_amount: buyer_amt,
+        seller_amount: seller_amt,
         timestamp,
         policy_hash,
     }
@@ -88,29 +121,30 @@ pub async fn create_escrow(
     Ok(H256::zero())
 }
 
-/// Simulate fetching escrow (placeholder logic)
+/// Simulate fetching escrow
 pub async fn get_escrow(&self, order_id: H256) -> Result<Escrow> {
-    let timestamp = chrono::Utc::now().timestamp() as u64;
-    
-    Ok(Escrow {
-        order_id,
-        buyer: self.buyer_address,
-        seller: "0x0000000000000000000000000000000000000001".parse().unwrap(),
-        buyer_amount: U256::from(42_000),
-        seller_amount: U256::zero(),
-        created_at: timestamp,
-        timestamp,
-        policy_hash: H256::zero(),
-        state: EscrowState::BuyerCommitted,
-        mode: EscrowMode::Purchase,
-    })
+    // Retrieve from storage
+    self.escrows
+        .lock()
+        .unwrap()
+        .get(&order_id)
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Escrow not found for order_id: {:?}", order_id))
 }
 
-/// Simulates basic verification (placeholder)
+/// Simulates basic verification
 pub fn verify_receipt(&self, receipt: &Receipt) -> bool {
-    (receipt.buyer_amount > 0 || receipt.seller_amount > 0)
-        && receipt.buyer != Address::zero()
-        && receipt.seller != Address::zero()
+    receipt.buyer == self.buyer_address
+}
+
+/// Generate a unique order ID
+fn generate_order_id(&self) -> H256 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    H256::from_low_u64_be((timestamp % u64::MAX as u128) as u64)
 }
 
 /// Debug logging

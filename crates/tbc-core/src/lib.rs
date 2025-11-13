@@ -7,7 +7,7 @@ pub mod protocol;
 pub mod types;
 
 pub use gateway::Gateway;
-pub use protocol::Protocol;
+///pub use protocol::Protocol;
 pub use types::*;
 
 /// Library version

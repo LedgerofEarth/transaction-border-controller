@@ -4,6 +4,8 @@ pub mod api;
 pub mod settlement;
 pub mod workers;
 pub mod profiles;
+pub mod engine;
+pub mod types;
 
 pub use api::routes::create_router;
 

@@ -1,84 +1,76 @@
-// CoreProver Types - Final Architecture
+// ============================================================================
+// CoreProver Types (v0.3)
+// Triple-Clock Model + Full TXID Provenance + Chain-Aware Receipts
 //
-// Implements the finalized dual-commitment escrow with:
-// - Explicit state enumeration (EVM-friendly)
-// - Re-lock/unlock withdrawal logic
-// - Late fulfillment discount mechanism
-// - Receipt metadata structure
+// This file defines:
+// - EscrowState
+// - TimingWindows
+// - PaymentProfile
+// - ReceiptMetadata
+// - Escrow (session record)
+// - Full provenance requirements
 //
-// This replaces all prior versions.
+// Notes:
+// - Uses ONLY u64 seconds for time (monotonic + unix)
+// - ISO8601 strings for receipt readability
+// - Required txids for all blockchain-anchored actions:
+//      buyer_commit_txid
+//      seller_accept_txid
+//      seller_fulfill_txid
+//      seller_claim_txid OR seller_refund_txid
+// - Optional txid for buyer_withdraw
+// - Supports multi-chain by including chain_id for each actor
+// ============================================================================
 
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
 
 // ============================================================================
-// Core State Machine (Final - Explicit States)
+// Escrow State Machine (v0.3)
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EscrowState {
-    BuyerInitiated,
     BuyerCommitted,
     SellerAccepted,
     SellerFulfilled,
     FulfillmentExpired,
-    LateFulfilled,
-    BuyerWithdrawn,
     SellerClaimed,
     SellerRefunded,
-    EscrowClosed,
+    BuyerWithdrawn,
 }
 
 impl EscrowState {
-    pub fn is_terminal(&self) -> bool {
+    pub fn is_terminal(self) -> bool {
         matches!(
             self,
-            EscrowState::BuyerWithdrawn
-                | EscrowState::SellerClaimed
+            EscrowState::SellerClaimed
                 | EscrowState::SellerRefunded
-                | EscrowState::EscrowClosed
+                | EscrowState::BuyerWithdrawn
         )
     }
 
-    pub fn is_withdrawal_locked(&self) -> bool {
-        matches!(
-            self,
-            EscrowState::SellerAccepted
-                | EscrowState::SellerFulfilled
-                | EscrowState::LateFulfilled
-        )
-    }
-
-    pub fn can_seller_claim(&self) -> bool {
-        matches!(self, EscrowState::SellerFulfilled | EscrowState::LateFulfilled)
+    pub fn can_fulfill(self) -> bool {
+        matches!(self, EscrowState::SellerAccepted | EscrowState::FulfillmentExpired)
     }
 }
 
 // ============================================================================
-// Timing Windows
+// Timing Windows (pure u64 seconds)
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimingWindows {
-    pub acceptance_window: Duration,
-    pub fulfillment_window: Duration,
-    pub claim_window: Duration,
+    pub acceptance_window_secs: u64,
+    pub fulfillment_window_secs: u64,
+    pub claim_window_secs: u64,
 }
 
 impl TimingWindows {
     pub fn pizza_delivery() -> Self {
         Self {
-            acceptance_window: Duration::from_secs(1800),
-            fulfillment_window: Duration::from_secs(3600),
-            claim_window: Duration::from_secs(3600),
-        }
-    }
-
-    pub fn ecommerce() -> Self {
-        Self {
-            acceptance_window: Duration::from_secs(86400),
-            fulfillment_window: Duration::from_secs(604800),
-            claim_window: Duration::from_secs(2592000),
+            acceptance_window_secs: 1800, // 30 minutes
+            fulfillment_window_secs: 3600, // 1 hour
+            claim_window_secs: 3600,       // 1 hour
         }
     }
 }
@@ -109,114 +101,89 @@ impl PaymentProfile {
 }
 
 // ============================================================================
-// Legal Signature
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LegalSignature {
-    pub signature: Vec<u8>,
-    pub business_name: String,
-    pub business_license: String,
-    pub document_hash: [u8; 32],
-    pub timestamp: u64,
-}
-
-// ============================================================================
-// Receipt Metadata
+// Receipt Metadata (FULL version, v0.3)
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReceiptMetadata {
     pub session_id: [u8; 32],
     pub order_amount: u128,
+
+    // Timing (Triple-Clock)
+    pub fulfillment_mono: u64,
+    pub fulfillment_unix: u64,
+    pub fulfillment_iso: String,
+
+    pub settlement_mono: u64,
+    pub settlement_unix: u64,
+    pub settlement_iso: String,
+
+    // Discounts
     pub late_fulfilled: bool,
     pub discount_pct: u8,
-    pub discount_expiration: u64,
-    pub fulfillment_timestamp: u64,
-    pub settlement_timestamp: u64,
-}
+    pub discount_expiration_unix: u64,
 
-impl ReceiptMetadata {
-    pub fn on_time(
-        session_id: [u8; 32],
-        order_amount: u128,
-        fulfillment_timestamp: u64,
-        settlement_timestamp: u64,
-    ) -> Self {
-        Self {
-            session_id,
-            order_amount,
-            late_fulfilled: false,
-            discount_pct: 0,
-            discount_expiration: 0,
-            fulfillment_timestamp,
-            settlement_timestamp,
-        }
-    }
+    // Blockchain provenance (required)
+    pub buyer_chain_id: u64,
+    pub buyer_commit_txid: String,
 
-    pub fn late_fulfilled(
-        session_id: [u8; 32],
-        order_amount: u128,
-        discount_pct: u8,
-        discount_expiration_days: u64,
-        fulfillment_timestamp: u64,
-        settlement_timestamp: u64,
-    ) -> Self {
-        let discount_expiration = fulfillment_timestamp + (discount_expiration_days * 86400);
+    pub seller_chain_id: u64,
+    pub seller_accept_txid: String,
+    pub seller_fulfill_txid: String,
 
-        Self {
-            session_id,
-            order_amount,
-            late_fulfilled: true,
-            discount_pct,
-            discount_expiration,
-            fulfillment_timestamp,
-            settlement_timestamp,
-        }
-    }
+    // Final settlement (one of these MUST be present)
+    pub seller_claim_txid: Option<String>,
+    pub seller_refund_txid: Option<String>,
 
-    pub fn is_discount_valid(&self, current_time: u64) -> bool {
-        self.late_fulfilled
-            && self.discount_pct > 0
-            && current_time < self.discount_expiration
-    }
+    // Optional economic termination before fulfillment
+    pub buyer_withdraw_txid: Option<String>,
+
+    // Settlement ordering anchor
+    pub seller_block_height: u64,
 }
 
 // ============================================================================
-// Receipt
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Receipt {
-    pub receipt_id: u64,
-    pub order_id: [u8; 32],
-    pub buyer: String,
-    pub seller: String,
-    pub metadata: ReceiptMetadata,
-}
-
-// ============================================================================
-// Escrow Record
+// Escrow Session Record
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Escrow {
+    // Identity
     pub order_id: [u8; 32],
     pub buyer: String,
     pub seller: String,
+
+    // Value
     pub amount: u64,
-    pub state: EscrowState,
     pub profile: PaymentProfile,
 
-    pub buyer_commit_time: Option<Instant>,
-    pub seller_accept_time: Option<Instant>,
-    pub fulfillment_time: Option<Instant>,
-    pub settlement_time: Option<Instant>,
+    pub state: EscrowState,
 
-    pub seller_signature: Option<LegalSignature>,
+    // Timing (monotonic seconds)
+    pub buyer_commit_mono: u64,
+    pub seller_accept_mono: Option<u64>,
+    pub fulfillment_mono: Option<u64>,
+    pub settlement_mono: Option<u64>,
 
-    pub acceptance_deadline: Option<Instant>,
-    pub fulfillment_deadline: Option<Instant>,
+    // Deadlines (monotonic seconds)
+    pub acceptance_deadline_mono: u64,
+    pub fulfillment_deadline_mono: Option<u64>,
+
+    // Blockchain provenance (required + optional)
+    pub buyer_chain_id: u64,
+    pub buyer_commit_txid: String,
+
+    pub seller_chain_id: u64,
+    pub seller_accept_txid: Option<String>,
+    pub seller_fulfill_txid: Option<String>,
+
+    pub seller_claim_txid: Option<String>,
+    pub seller_refund_txid: Option<String>,
+
+    pub buyer_withdraw_txid: Option<String>,
+
+    // Final settlement anchor
+    pub seller_block_height: Option<u64>,
 }
 
 impl Escrow {
@@ -226,191 +193,42 @@ impl Escrow {
         seller: String,
         amount: u64,
         profile: PaymentProfile,
-        current_time: Instant,
+        buyer_chain_id: u64,
+        buyer_commit_txid: String,
+        current_mono: u64,
     ) -> Self {
-        let acceptance_deadline = Some(current_time + profile.timing.acceptance_window);
+        let acceptance_deadline = current_mono + profile.timing.acceptance_window_secs;
 
         Self {
             order_id,
             buyer,
             seller,
             amount,
+            profile,
             state: EscrowState::BuyerCommitted,
-            profile,
-            buyer_commit_time: Some(current_time),
-            seller_accept_time: None,
-            fulfillment_time: None,
-            settlement_time: None,
-            seller_signature: None,
-            acceptance_deadline,
-            fulfillment_deadline: None,
+
+            buyer_commit_mono: current_mono,
+            seller_accept_mono: None,
+            fulfillment_mono: None,
+            settlement_mono: None,
+
+            acceptance_deadline_mono: acceptance_deadline,
+            fulfillment_deadline_mono: None,
+
+            // provenance
+            buyer_chain_id,
+            buyer_commit_txid,
+
+            seller_chain_id: 0, // will be set at accept-time
+            seller_accept_txid: None,
+            seller_fulfill_txid: None,
+
+            seller_claim_txid: None,
+            seller_refund_txid: None,
+
+            buyer_withdraw_txid: None,
+
+            seller_block_height: None,
         }
-    }
-
-    pub fn update_withdrawal_lock(&mut self, current_time: Instant) {
-        match self.state {
-            EscrowState::BuyerCommitted => {
-                if let Some(deadline) = self.acceptance_deadline {
-                    if current_time > deadline {
-                        // Buyer can withdraw; no state change until action
-                    }
-                }
-            }
-            EscrowState::SellerAccepted => {
-                if let Some(deadline) = self.fulfillment_deadline {
-                    if current_time > deadline {
-                        self.state = EscrowState::FulfillmentExpired;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    pub fn can_buyer_withdraw(&self, current_time: Instant) -> bool {
-        match self.state {
-            EscrowState::BuyerCommitted => {
-                if let Some(deadline) = self.acceptance_deadline {
-                    current_time > deadline
-                } else {
-                    false
-                }
-            }
-            EscrowState::FulfillmentExpired => true,
-            _ => false,
-        }
-    }
-
-    pub fn can_seller_claim(&self, _current_time: Instant) -> bool {
-        matches!(
-            self.state,
-            EscrowState::SellerFulfilled | EscrowState::LateFulfilled
-        )
-    }
-
-    pub fn is_late_fulfillment(&self, fulfillment_time: Instant) -> bool {
-        if let Some(deadline) = self.fulfillment_deadline {
-            fulfillment_time > deadline
-        } else {
-            false
-        }
-    }
-
-    pub fn generate_receipt_metadata(
-        &self,
-        session_id: [u8; 32],
-        current_time: u64,
-    ) -> ReceiptMetadata {
-        let fulfillment_timestamp = self
-            .fulfillment_time
-            .map(|t| {
-                self.buyer_commit_time
-                    .map(|start| (t - start).as_secs())
-                    .unwrap_or(0)
-            })
-            .unwrap_or(0);
-
-        match self.state {
-            EscrowState::LateFulfilled => ReceiptMetadata::late_fulfilled(
-                session_id,
-                self.amount as u128,
-                self.profile.late_discount_pct,
-                self.profile.discount_expiration_days,
-                fulfillment_timestamp,
-                current_time,
-            ),
-            _ => ReceiptMetadata::on_time(
-                session_id,
-                self.amount as u128,
-                fulfillment_timestamp,
-                current_time,
-            ),
-        }
-    }
-}
-
-// ============================================================================
-// Events
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum EscrowEvent {
-    BuyerCommitted {
-        order_id: [u8; 32],
-        amount: u64,
-        acceptance_deadline: u64,
-    },
-    SellerAccepted {
-        order_id: [u8; 32],
-        fulfillment_deadline: u64,
-    },
-    SellerFulfilled {
-        order_id: [u8; 32],
-        fulfillment_timestamp: u64,
-    },
-    FulfillmentExpired {
-        order_id: [u8; 32],
-        buyer_withdrawal_unlocked: bool,
-    },
-    SellerLateFulfilled {
-        order_id: [u8; 32],
-        fulfillment_timestamp: u64,
-        discount_pct: u8,
-        discount_expiration: u64,
-    },
-    SellerClaimed {
-        order_id: [u8; 32],
-        amount: u64,
-        receipt_id: u64,
-    },
-    BuyerWithdrawn {
-        order_id: [u8; 32],
-        amount: u64,
-    },
-    ReceiptMinted {
-        order_id: [u8; 32],
-        receipt_id: u64,
-        metadata: ReceiptMetadata,
-    },
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_state_terminal_checks() {
-        assert!(EscrowState::BuyerWithdrawn.is_terminal());
-        assert!(EscrowState::SellerClaimed.is_terminal());
-        assert!(!EscrowState::BuyerCommitted.is_terminal());
-        assert!(!EscrowState::SellerAccepted.is_terminal());
-    }
-
-    #[test]
-    fn test_withdrawal_lock_states() {
-        assert!(!EscrowState::BuyerCommitted.is_withdrawal_locked());
-        assert!(EscrowState::SellerAccepted.is_withdrawal_locked());
-        assert!(!EscrowState::FulfillmentExpired.is_withdrawal_locked());
-        assert!(EscrowState::LateFulfilled.is_withdrawal_locked());
-    }
-
-    #[test]
-    fn test_escrow_creation() {
-        let order_id = [1u8; 32];
-        let profile = PaymentProfile::pizza_delivery();
-        let now = Instant::now();
-
-        let escrow = Escrow::new(
-            order_id,
-            "buyer".to_string(),
-            "seller".to_string(),
-            1000,
-            profile,
-            now,
-        );
-
-        assert_eq!(escrow.state, EscrowState::BuyerCommitted);
-        assert!(escrow.acceptance_deadline.is_some());
-        assert!(escrow.fulfillment_deadline.is_none());
     }
 }

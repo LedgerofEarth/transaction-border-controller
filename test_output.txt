@@ -1,0 +1,440 @@
+   Compiling coreprover-bridge v0.1.0 (/workspaces/transaction-border-controller/crates/coreprover-bridge)
+warning: unused variable: `order_id`
+  --> crates/coreprover-bridge/src/client/escrow_client.rs:27:9
+   |
+27 |         order_id: [u8; 32],
+   |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_order_id`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `seller`
+  --> crates/coreprover-bridge/src/client/escrow_client.rs:28:9
+   |
+28 |         seller: Address,
+   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_seller`
+
+warning: unused variable: `amount`
+  --> crates/coreprover-bridge/src/client/escrow_client.rs:29:9
+   |
+29 |         amount: U256,
+   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_amount`
+
+warning: unused variable: `order_id`
+  --> crates/coreprover-bridge/src/client/escrow_client.rs:36:36
+   |
+36 |     pub async fn get_escrow(&self, order_id: [u8; 32]) -> Result<crate::types::Escrow> {
+   |                                    ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_order_id`
+
+warning: fields `provider` and `contract_address` are never read
+  --> crates/coreprover-bridge/src/client/escrow_client.rs:9:5
+   |
+ 8 | pub struct EscrowClient {
+   |            ------------ fields in this struct
+ 9 |     provider: Arc<Provider<Http>>,
+   |     ^^^^^^^^
+10 |     contract_address: Address,
+   |     ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+   Compiling coreprover-service v0.1.0 (/workspaces/transaction-border-controller/crates/coreprover-service)
+warning: `coreprover-bridge` (lib) generated 5 warnings
+error[E0277]: the trait bound `std::time::Instant: serde::Serialize` is not satisfied
+    --> crates/coreprover-service/src/types.rs:202:24
+     |
+ 202 | #[derive(Debug, Clone, Serialize, Deserialize)]
+     |                        ^^^^^^^^^ the trait `Serialize` is not implemented for `std::time::Instant`
+...
+ 211 |     pub buyer_commit_time: Option<Instant>,
+     |     --- required by a bound introduced by this call
+     |
+     = note: for local types consider adding `#[derive(serde::Serialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Serialize`:
+               &'a T
+               &'a mut T
+               ()
+               (T,)
+               (T0, T1)
+               (T0, T1, T2)
+               (T0, T1, T2, T3)
+               (T0, T1, T2, T3, T4)
+             and 382 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Serialize`
+note: required by a bound in `_::_serde::ser::SerializeStruct::serialize_field`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/ser/mod.rs:1917:21
+     |
+1915 |     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+     |        --------------- required by a bound in this associated function
+1916 |     where
+1917 |         T: ?Sized + Serialize;
+     |                     ^^^^^^^^^ required by this bound in `SerializeStruct::serialize_field`
+     = note: this error originates in the derive macro `Serialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:211:28
+     |
+ 211 |     pub buyer_commit_time: Option<Instant>,
+     |                            ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:212:29
+     |
+ 212 |     pub seller_accept_time: Option<Instant>,
+     |                             ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:213:27
+     |
+ 213 |     pub fulfillment_time: Option<Instant>,
+     |                           ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:214:26
+     |
+ 214 |     pub settlement_time: Option<Instant>,
+     |                          ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:218:30
+     |
+ 218 |     pub acceptance_deadline: Option<Instant>,
+     |                              ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:219:31
+     |
+ 219 |     pub fulfillment_deadline: Option<Instant>,
+     |                               ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_element`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1771:12
+     |
+1769 |     fn next_element<T>(&mut self) -> Result<Option<T>, Self::Error>
+     |        ------------ required by a bound in this associated function
+1770 |     where
+1771 |         T: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `SeqAccess::next_element`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:211:28
+     |
+ 211 |     pub buyer_commit_time: Option<Instant>,
+     |                            ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:212:29
+     |
+ 212 |     pub seller_accept_time: Option<Instant>,
+     |                             ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:213:27
+     |
+ 213 |     pub fulfillment_time: Option<Instant>,
+     |                           ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:214:26
+     |
+ 214 |     pub settlement_time: Option<Instant>,
+     |                          ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:218:30
+     |
+ 218 |     pub acceptance_deadline: Option<Instant>,
+     |                              ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+    --> crates/coreprover-service/src/types.rs:219:31
+     |
+ 219 |     pub fulfillment_deadline: Option<Instant>,
+     |                               ^^^^^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+     |
+     = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+     = note: for types from other crates check whether the crate offers a `serde` feature flag
+     = help: the following other types implement trait `Deserialize<'de>`:
+               `&'a [u8]` implements `Deserialize<'de>`
+               `&'a camino::Utf8Path` implements `Deserialize<'de>`
+               `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+               `&'a std::path::Path` implements `Deserialize<'de>`
+               `&'a str` implements `Deserialize<'de>`
+               `()` implements `Deserialize<'de>`
+               `(T,)` implements `Deserialize<'de>`
+               `(T0, T1)` implements `Deserialize<'de>`
+             and 452 others
+     = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `next_value`
+    --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_core-1.0.228/src/de/mod.rs:1916:12
+     |
+1914 |     fn next_value<V>(&mut self) -> Result<V, Self::Error>
+     |        ---------- required by a bound in this associated function
+1915 |     where
+1916 |         V: Deserialize<'de>,
+     |            ^^^^^^^^^^^^^^^^ required by this bound in `MapAccess::next_value`
+
+error[E0277]: the trait bound `std::time::Instant: serde::Deserialize<'de>` is not satisfied
+   --> crates/coreprover-service/src/types.rs:202:35
+    |
+202 | #[derive(Debug, Clone, Serialize, Deserialize)]
+    |                                   ^^^^^^^^^^^ the trait `Deserialize<'_>` is not implemented for `std::time::Instant`
+    |
+    = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `std::time::Instant` type
+    = note: for types from other crates check whether the crate offers a `serde` feature flag
+    = help: the following other types implement trait `Deserialize<'de>`:
+              `&'a [u8]` implements `Deserialize<'de>`
+              `&'a camino::Utf8Path` implements `Deserialize<'de>`
+              `&'a serde_json::raw::RawValue` implements `Deserialize<'de>`
+              `&'a std::path::Path` implements `Deserialize<'de>`
+              `&'a str` implements `Deserialize<'de>`
+              `()` implements `Deserialize<'de>`
+              `(T,)` implements `Deserialize<'de>`
+              `(T0, T1)` implements `Deserialize<'de>`
+            and 452 others
+    = note: required for `std::option::Option<std::time::Instant>` to implement `Deserialize<'_>`
+note: required by a bound in `_::_serde::__private228::de::missing_field`
+   --> /usr/local/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:26:8
+    |
+ 24 | pub fn missing_field<'de, V, E>(field: &'static str) -> Result<V, E>
+    |        ------------- required by a bound in this function
+ 25 | where
+ 26 |     V: Deserialize<'de>,
+    |        ^^^^^^^^^^^^^^^^ required by this bound in `missing_field`
+    = note: this error originates in the derive macro `Deserialize` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `coreprover-service` (lib) due to 14 previous errors

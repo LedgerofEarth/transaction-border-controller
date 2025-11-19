@@ -71,7 +71,7 @@ pub async fn handle_inbound_error(
             {
                 "id": e.id,
                 "correlation": cid,
-                "session_id": session.id
+                "session_id": session.session_id
             },
             "Correlation chain linked"
         );

@@ -300,3 +300,62 @@ impl ErrorMessage {
         }
     }
 }
+// ============================================================================
+// Protocol Error Construction Helper (§3.4)
+// ============================================================================
+//
+// This helper produces fully-formed, protocol-compliant ErrorMessage structs.
+//
+// It is used by:
+//   • codec_tx.rs   -- JSON parsing errors, replay detection, decoding failures
+//   • inbound router -- session lookup failures, handler dispatch failures
+//   • handlers/*    -- validation failures, policy violations, settlement failures
+//
+// Behavior:
+//   • Always generates a fresh UUIDv4 for the error ID
+//   • Automatically applies correlation_id when provided
+//   • Produces errors that pass ErrorMessage::validate()
+//   • Keeps ErrorMessage pure and deterministic
+//
+// This function is intentionally placed in protocol.rs so the codec, router,
+// and handler layers can depend on it without creating a circular dependency.
+
+use uuid::Uuid;
+
+/// Create a TGP protocol error with automatic UUID generation.
+///
+/// # Examples
+///
+/// ```rust
+/// // Standalone error
+/// let e = make_protocol_error(None,
+///                             "INVALID_JSON",
+///                             "Malformed payload");
+///
+/// // Correlated error
+/// let e = make_protocol_error(
+///         Some("q-123".to_string()),
+///         "UNSUPPORTED_ASSET",
+///         "DOGE not supported");
+/// ```
+pub fn make_protocol_error(
+    correlation_id: Option<String>,
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> ErrorMessage {
+    let error_id = Uuid::new_v4().to_string();
+
+    match correlation_id {
+        Some(cid) => ErrorMessage::with_correlation(
+            error_id,
+            code.into(),
+            message.into(),
+            cid,
+        ),
+        None => ErrorMessage::new(
+            error_id,
+            code.into(),
+            message.into(),
+        ),
+    }
+}

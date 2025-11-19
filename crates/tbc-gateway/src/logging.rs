@@ -20,6 +20,26 @@ use chrono::Utc;
 use serde_json::json;
 use std::env;
 
+// ============================================================================
+// Logging Macros
+// ============================================================================
+
+/// Emit error-level log with structured fields
+#[macro_export]
+macro_rules! log_error {
+    (target: $target:expr, $fields:tt, $msg:expr) => {
+        $crate::logging::error($msg, serde_json::json!($fields));
+    };
+}
+
+/// Emit info-level log with structured fields
+#[macro_export]
+macro_rules! log_info {
+    (target: $target:expr, $fields:tt, $msg:expr) => {
+        $crate::logging::info($msg, serde_json::json!($fields));
+    };
+}
+
 /// Whether JSON mode is enabled (TBC_LOG_FORMAT=json)
 fn json_mode() -> bool {
     env::var("TBC_LOG_FORMAT")
@@ -100,7 +120,7 @@ pub fn log_tx(json: &str) {
 }
 
 /// Log protocol-level error before it is encoded
-pub fn log_err(err: &crate::tgp::protocol::ErrorMessage) {
+pub fn log_err(err: &tbc_core::tgp::protocol::ErrorMessage) {
     error(
         "Protocol Error",
         json!({
@@ -110,6 +130,41 @@ pub fn log_err(err: &crate::tgp::protocol::ErrorMessage) {
             "correlation_id": err.correlation_id
         })
     );
+}
+
+// =============================================================================
+// Session & Handler Logging
+// =============================================================================
+
+/// Log session creation event
+pub fn log_session_created(session: &tbc_core::tgp::state::TGPSession) {
+    info(
+        "session-created",
+        json!({
+            "session_id": session.session_id,
+            "state": format!("{:?}", session.state),
+            "created_at": session.created_at,
+        })
+    );
+}
+
+/// Log handler entry point
+pub fn log_handler(phase: &str) {
+    debug(
+        "handler-entry",
+        json!({ "phase": phase })
+    );
+}
+
+/// Create tracing span for TGP handler
+///
+/// Requires tracing crate in Cargo.toml
+pub fn tgp_span(session_id: &str, phase: &str) -> tracing::Span {
+    tracing::info_span!(
+        "tgp-handler",
+        session_id = %session_id,
+        phase = %phase
+    )
 }
 
 // =============================================================================

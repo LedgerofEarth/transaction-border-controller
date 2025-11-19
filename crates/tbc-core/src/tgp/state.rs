@@ -178,6 +178,15 @@ impl TGPSession {
         }
     }
 
+    /// Create an ephemeral session for error handling.
+    ///
+    /// Ephemeral sessions are used when processing ERROR messages
+    /// that have no correlation_id or reference unknown sessions.
+    /// They are not persisted to the SessionStore.
+    pub fn ephemeral(session_id: impl Into<String>) -> Self {
+        Self::new(session_id)
+    }
+
     // ---------------------------------------------------------------------
     // Observer registration
     // ---------------------------------------------------------------------
@@ -272,6 +281,37 @@ impl TGPSession {
 }
 
 // ============================================================================
+// Session Storage Abstraction
+// ============================================================================
+
+use async_trait::async_trait;
+use anyhow::Result;
+
+/// Storage abstraction for TGP sessions.
+///
+/// Implementations:
+///   • InMemoryStore (testing/development)
+///   • RedisStore (production cache)
+///   • PostgresStore (audit trail + persistence)
+#[async_trait]
+pub trait SessionStore: Send + Sync {
+    /// Create a new session with the given ID.
+    async fn create_session(&self, session_id: String) -> Result<TGPSession>;
+    
+    /// Retrieve a session by ID.
+    async fn get_session(&self, session_id: &str) -> Result<Option<TGPSession>>;
+    
+    /// Update an existing session.
+    async fn update_session(&self, session: &TGPSession) -> Result<()>;
+    
+    /// Delete a session (for cleanup).
+    async fn delete_session(&self, session_id: &str) -> Result<()>;
+    
+    /// List sessions (for admin/debug, paginated).
+    async fn list_sessions(&self, limit: usize) -> Result<Vec<TGPSession>>;
+}
+
+// ============================================================================
 // Helper
 // ============================================================================
 
@@ -325,5 +365,12 @@ mod tests {
         s.transition(TGPState::QuerySent).unwrap();
         s.force_error();
         assert_eq!(s.state, TGPState::Errored);
+    }
+
+    #[test]
+    fn test_ephemeral_session() {
+        let s = TGPSession::ephemeral("temp-123");
+        assert_eq!(s.session_id, "temp-123");
+        assert_eq!(s.state, TGPState::Idle);
     }
 }

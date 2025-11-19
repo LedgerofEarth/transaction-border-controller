@@ -486,3 +486,116 @@ mod tests {
         assert!(validate_correlation_id("invalid", Some("QUERY")).is_err()); // Wrong prefix
     }
 }
+//============================================================================
+// TGP Enforcement Bridge (Hybrid in Mem Integration Layer)
+// ============================================================================
+//
+// This layer connects low-level input validation (this file)
+// with the high-level policy + decision modules:
+//
+//   types.rs     → EconomicEnvelope, ZkProfile
+//   policy.rs    → BuyerPolicy, VendorPolicy, SessionKeyPolicy
+//   decision.rs  → TBCDecision, RejectReason, TGPValidationResult
+//
+// This keeps validation.rs fully backward-compatible while enabling
+// TGP-SEC-00 and MCP-AUTO-PAY-00 rule enforcement.
+
+use crate::tgp::policy::{BuyerPolicy, VendorPolicy, SessionKeyPolicy};
+use crate::tgp::decision::{TBCDecision, RejectReason, TGPValidationResult};
+
+/// Validate an EconomicEnvelope against Buyer + Vendor policy
+pub fn enforce_economic_policy(
+    envelope: &super::types::EconomicEnvelope,
+    buyer: &BuyerPolicy,
+    vendor: &VendorPolicy,
+) -> TGPValidationResult {
+    // Validate envelope itself
+    if let Err(e) = envelope.validate() {
+        return TGPValidationResult::reject(RejectReason::EconomicEnvelopeExceeded)
+            .with_details(e);
+    }
+
+    // Check vendor's own maximum
+    if envelope.max_fees_bps > vendor.economic.max_fees_bps {
+        return TGPValidationResult::reject(RejectReason::PolicyViolation)
+            .with_details(format!(
+                "Vendor max fees {}bps < envelope {}bps",
+                vendor.economic.max_fees_bps, envelope.max_fees_bps
+            ));
+    }
+
+    // All good
+    TGPValidationResult::ok()
+}
+
+/// Validate whether escrow is required (Buyer + Vendor + SessionKey)
+pub fn enforce_escrow_policy(
+    buyer: &BuyerPolicy,
+    vendor: &VendorPolicy,
+    key: Option<&SessionKeyPolicy>,
+    amount: u64,
+) -> TGPValidationResult {
+    // Buyer explicitly requires escrow
+    if buyer.zk_profile.requires_escrow() {
+        return TGPValidationResult {
+            decision: TBCDecision::EscrowRequired,
+            details: Some("Buyer requires escrow".into()),
+        };
+    }
+
+    // Vendor explicitly requires escrow (untrusted seller)
+    if vendor.require_escrow {
+        return TGPValidationResult {
+            decision: TBCDecision::EscrowRequired,
+            details: Some("Vendor requires escrow".into()),
+        };
+    }
+
+    // Buyer allows direct payment only below a threshold
+    if amount > buyer.max_direct_amount {
+        return TGPValidationResult {
+            decision: TBCDecision::EscrowRequired,
+            details: Some("Direct payment exceeds buyer threshold".into()),
+        };
+    }
+
+    // Session key constraints
+    if let Some(k) = key {
+        if k.escrow_required {
+            return TGPValidationResult {
+                decision: TBCDecision::EscrowRequired,
+                details: Some("SessionKey requires escrow".into()),
+            };
+        }
+    }
+
+    // Everything permits direct payment
+    TGPValidationResult::ok()
+}
+
+/// Validate an amount against Buyer and Vendor maximums
+pub fn enforce_amount_policy(
+    amount: u64,
+    buyer: &BuyerPolicy,
+    vendor: &VendorPolicy,
+) -> TGPValidationResult {
+    if amount > buyer.max_total_amount {
+        return TGPValidationResult::reject(RejectReason::PolicyViolation)
+            .with_details("Amount exceeds buyer maximum");
+    }
+
+    if amount > vendor.max_offer_amount {
+        return TGPValidationResult::reject(RejectReason::PolicyViolation)
+            .with_details("Amount exceeds vendor maximum");
+    }
+
+    TGPValidationResult::ok()
+}
+
+// Extend TGPValidationResult with convenience builder
+impl TGPValidationResult {
+    pub fn with_details(mut self, msg: impl Into<String>) -> Self {
+        self.details = Some(msg.into());
+        self
+    }
+}

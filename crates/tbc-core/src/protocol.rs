@@ -901,3 +901,174 @@ fn test_economic_envelope_validation() {
 }
 
 }
+// ============================================================================
+// Protocol Layer Extensions (Required for Router Enforcement)
+// Adds: Envelope, Metadata, Parsing, Encoding, Errors, Session Binding
+// ============================================================================
+
+use crate::tgp::validation::*;
+use crate::tgp::state::TGPSession;
+
+// -----------------------------
+// Message Envelope
+// -----------------------------
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageEnvelope<T> {
+    pub session_id: Option<String>,
+    pub correlation_id: Option<String>,
+    pub received_at: u64,
+    pub body: T,
+}
+
+impl<T> MessageEnvelope<T> {
+    pub fn new(session_id: Option<String>, correlation_id: Option<String>, body: T) -> Self {
+        Self {
+            session_id,
+            correlation_id,
+            received_at: chrono::Utc::now().timestamp_millis() as u64,
+            body,
+        }
+    }
+}
+
+// -----------------------------
+// Metadata
+// -----------------------------
+#[derive(Debug, Clone)]
+pub enum TGPMessageType {
+    Query,
+    Offer,
+    Settle,
+    Error,
+}
+
+#[derive(Debug, Clone)]
+pub struct TGPMetadata {
+    pub msg_type: TGPMessageType,
+    pub msg_id: String,
+    pub correlation_id: Option<String>,
+    pub origin: String,
+    pub raw_json: String,
+}
+
+impl TGPMetadata {
+    pub fn from_message(raw_json: String, message: &TGPMessage) -> Self {
+        let msg_type = match message {
+            TGPMessage::Query(_) => TGPMessageType::Query,
+            TGPMessage::Offer(_) => TGPMessageType::Offer,
+            TGPMessage::Settle(_) => TGPMessageType::Settle,
+            TGPMessage::Error(_) => TGPMessageType::Error,
+        };
+
+        let correlation_id = match message {
+            TGPMessage::Query(_) => None,
+            TGPMessage::Offer(o) => Some(o.query_id.clone()),
+            TGPMessage::Settle(s) => Some(s.query_or_offer_id.clone()),
+            TGPMessage::Error(e) => e.correlation_id.clone(),
+        };
+
+        Self {
+            msg_type,
+            msg_id: message.id().to_string(),
+            correlation_id,
+            origin: "unknown".into(),
+            raw_json,
+        }
+    }
+}
+// -----------------------------
+// Parsing
+// -----------------------------
+pub fn parse_message(json: &str) -> Result<TGPMessage, String> {
+    serde_json::from_str::<TGPMessage>(json)
+        .map_err(|e| format!("Failed to parse TGPMessage: {}", e))
+}
+
+pub fn classify_message(json: &str) -> Result<(TGPMetadata, TGPMessage), String> {
+    let msg = parse_message(json)?;
+    let metadata = TGPMetadata::from_message(json.to_string(), &msg);
+    Ok((metadata, msg))
+}
+
+// -----------------------------
+// Encoding
+// -----------------------------
+pub fn encode_message(message: &TGPMessage) -> Result<String, String> {
+    serde_json::to_string(message)
+        .map_err(|e| format!("Failed to encode TGPMessage: {}", e))
+}
+
+// -----------------------------
+// Error Builders (Protocol-Compliant)
+// -----------------------------
+pub fn make_protocol_error(
+    correlation_id: Option<String>,
+    code: &str,
+    detail: impl Into<String>,
+) -> ErrorMessage {
+    ErrorMessage {
+        id: format!("err-{}", uuid::Uuid::new_v4()),
+        code: code.to_string(),
+        message: detail.into(),
+        correlation_id,
+    }
+}
+
+pub fn error_from_validation(
+    metadata: &TGPMetadata,
+    reason: impl Into<String>,
+) -> ErrorMessage {
+    make_protocol_error(
+        metadata.correlation_id.clone(),
+        "POLICY_VIOLATION",
+        reason.into(),
+    )
+}
+
+pub fn error_from_exception(msg: impl Into<String>) -> ErrorMessage {
+    make_protocol_error(None, "INTERNAL_ERROR", msg.into())
+}
+
+// -----------------------------
+// Session Binding
+// -----------------------------
+#[derive(Debug, Clone)]
+pub struct SessionBinding<T> {
+    pub session: TGPSession,
+    pub envelope: MessageEnvelope<T>,
+    pub metadata: TGPMetadata,
+}
+
+impl<T: Clone> SessionBinding<T> {
+    pub fn new(session: TGPSession, metadata: TGPMetadata, envelope: MessageEnvelope<T>) -> Self {
+        Self { session, metadata, envelope }
+    }
+}
+
+// -----------------------------
+// Validation + Policy Entry Point
+// -----------------------------
+#[derive(Debug)]
+pub enum TGPValidationResult {
+    Accept,
+    Reject(ErrorMessage),
+}
+
+pub fn validate_and_classify_message(
+    metadata: &TGPMetadata,
+    message: &TGPMessage,
+) -> TGPValidationResult {
+    // Run built-in message validation first
+    if let Err(e) = message.validate() {
+        return TGPValidationResult::Reject(error_from_validation(metadata, e));
+    }
+
+    // Additional validation rules can be applied here (policy-level)
+    // e.g.:
+    // - address blacklist
+    // - session_key requirement
+    // - fee cap enforcement
+    // - replay protection
+
+    TGPValidationResult::Accept
+}

@@ -1,31 +1,38 @@
 //! Unified logging module for TBC Gateway
 //!
-//! Features:
-//! - JSON logging mode (`TBC_LOG_FORMAT=json`)
-//! - ANSI-safe colored output
-//! - tracing::span integration
-//! - Structured fields for TGP message lifecycle
-//! - Telecom-grade timestamping
+//! This module implements telecom-grade structured logging for all TGP
+//! operations. It supports:
+//!   • JSON logging mode (TBC_LOG_FORMAT=json)
+//!   • ANSI-safe color output for terminals
+//!   • RFC3339 timestamps with microseconds (SIP-style diagnostics)
+//!   • State-transition visualization (Observer pattern)
+//!   • Full TGP metadata logging hooks
+//!   • Router-level RX/TX logs
+//!
+//! Design notes:
+//!   • SIP RFC3261 encourages splitting parsing, transaction,
+//!     and transport layers -- but logging remains centralized.
+//!   • Following that guidance, TBC centralizes all visibility here,
+//!     while keeping business logic clean.
 
 use ansi_term::Colour::*;
 use chrono::Utc;
 use serde_json::json;
 use std::env;
-use tracing::{event, span, Level};
 
-/// Determine if JSON mode is enabled
+/// Whether JSON mode is enabled (TBC_LOG_FORMAT=json)
 fn json_mode() -> bool {
     env::var("TBC_LOG_FORMAT")
         .map(|v| v.to_lowercase() == "json")
         .unwrap_or(false)
 }
 
-/// Telecom-grade timestamp (RFC3339 + microseconds)
+/// RFC3339 timestamp w/ microseconds (SIP-grade granularity)
 fn ts() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
 }
 
-/// Emit a log entry
+/// Emit a unified log entry
 pub fn log_event(level: &str, msg: &str, fields: serde_json::Value) {
     if json_mode() {
         let payload = json!({
@@ -34,25 +41,24 @@ pub fn log_event(level: &str, msg: &str, fields: serde_json::Value) {
             "msg": msg,
             "fields": fields
         });
-
         println!("{}", payload.to_string());
         return;
     }
 
-    // ANSI-colored fallback
-    let line = match level {
-        "ERROR" => Red.paint(msg).to_string(),
-        "WARN"  => Yellow.paint(msg).to_string(),
-        "INFO"  => Cyan.paint(msg).to_string(),
-        "DEBUG" => Purple.paint(msg).to_string(),
-        "TRACE" => White.paint(msg).to_string(),
-        _ => msg.to_string(),
+    // ANSI fallback mode
+    let lvl = match level {
+        "ERROR" => Red.paint("ERROR").to_string(),
+        "WARN"  => Yellow.paint("WARN").to_string(),
+        "INFO"  => Cyan.paint("INFO").to_string(),
+        "DEBUG" => Purple.paint("DEBUG").to_string(),
+        "TRACE" => White.paint("TRACE").to_string(),
+        _ => level.to_string(),
     };
 
-    println!("[{}] {} | {}", ts(), level, line);
+    println!("[{}] {} | {}", ts(), lvl, msg);
 }
 
-/// Logging helpers
+/// Convenience wrappers
 pub fn info(msg: &str, fields: serde_json::Value) {
     log_event("INFO", msg, fields);
 }
@@ -73,23 +79,70 @@ pub fn trace(msg: &str, fields: serde_json::Value) {
     log_event("TRACE", msg, fields);
 }
 
-/// Create a tracing span for TGP operations
-pub fn tgp_span(session: &str, phase: &str) -> tracing::Span {
-    span!(
-        Level::INFO,
-        "tgp",
-        session = session,
-        phase = phase
-    )
+// =============================================================================
+// RX / TX Logging
+// =============================================================================
+
+/// Log raw inbound JSON (pre-parse)
+pub fn log_rx(json: &str) {
+    trace(
+        "Inbound JSON",
+        json!({ "payload": json })
+    );
 }
 
-/// Colored state transition logging
+/// Log outbound response JSON
+pub fn log_tx(json: &str) {
+    trace(
+        "Outbound JSON",
+        json!({ "payload": json })
+    );
+}
+
+/// Log protocol-level error before it is encoded
+pub fn log_err(err: &crate::tgp::protocol::ErrorMessage) {
+    error(
+        "Protocol Error",
+        json!({
+            "id": err.id,
+            "code": err.code,
+            "message": err.message,
+            "correlation_id": err.correlation_id
+        })
+    );
+}
+
+// =============================================================================
+// State Transition Logging (Observer Pattern)
+// =============================================================================
+
+/// Log state transitions (TGPSession)
+///
+/// Called by state.rs via an observer.
+/// This keeps `state.rs` clean and side-effect-free.
+///
+/// Colors:
+///   • from-state = Green
+///   • to-state   = Blue
+///   • action tag = Cyan
 pub fn log_state_transition(
     session_id: &str,
     from: &str,
     to: &str,
 ) {
-    let colored = format!(
+    if json_mode() {
+        info(
+            "state-change",
+            json!({
+                "session_id": session_id,
+                "from": from,
+                "to": to
+            }),
+        );
+        return;
+    }
+
+    let msg = format!(
         "{} {} → {}",
         Cyan.paint("state-change"),
         Green.paint(from),
@@ -97,7 +150,7 @@ pub fn log_state_transition(
     );
 
     info(
-        &colored,
+        &msg,
         json!({
             "session_id": session_id,
             "from": from,
@@ -106,7 +159,7 @@ pub fn log_state_transition(
     );
 }
 
-/// TRACE: dump full SSO
+/// Dump full SSO (state storage object) for debugging
 pub fn trace_sso(session_id: &str, sso_json: serde_json::Value) {
     trace(
         "SSO dump",

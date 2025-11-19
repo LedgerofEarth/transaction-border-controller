@@ -1,28 +1,37 @@
-//! TGP Message Router (Controller-Side)
+//! # Inbound Router (Controller-Side)
 //!
-//! This module implements the inbound message router for all TGP-00 traffic.
-//! It performs:
-//!   • JSON parsing
-//!   • message classification
-//!   • structural validation
-//!   • policy enforcement
-//!   • state lookup
-//!   • routing to correct handler
-//!   • envelope construction
-//!   • standardized error responses
+//! This is the SIP-style Transaction Layer for the Transaction Border Controller.
 //!
-//! This is the controller brain of the Transaction Border Controller (TBC).
+//! Responsibilities:
+//!   • transport parsing      (via codec_tx)
+//!   • message classification (phase → handler)
+//!   • replay protection      (via codec_tx::ReplayProtector)
+//!   • structural validation  (TGP-00 §3)
+//!   • state lookup/update    (TGP-00 §4 session lifecycle)
+//!   • handler dispatch       (pure functions in handlers/*)
+//!   • unified error model    (protocol.rs::make_protocol_error)
+//!   • logging                (JSON or ANSI-safe)
+//!
+//! NOT responsible for application logic (handlers are pure).
+//! NOT responsible for settlement verification (MCP agent handles this externally).
+//!
+//! Mirrors SIP RFC3261 Transaction Layer boundaries:
+//!   • Parsing separated (codec_tx)
+//!   • Transport separated (gateway.rs)
+//!   • Application logic isolated from router (handlers/*)
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
 use tbc_core::tgp::{
-    protocol::{
-        TGPMessage, TGPMetadata, TGPValidationResult, classify_message,
-        validate_and_classify_message, encode_message, make_protocol_error
+    codec_tx::{
+        classify_message,
+        encode_message,
+        validate_and_classify_message,
+        ReplayProtector,
     },
+    protocol::TGPMessage,
     state::{TGPSession, SessionStore},
-    validation::*,
 };
 
 use crate::handlers::{
@@ -34,71 +43,91 @@ use crate::handlers::{
 
 use crate::logging::*;
 
-
-/// Primary Router Interface
+/// Inbound Router Interface
 #[async_trait]
 pub trait TGPInboundRouter {
-    async fn route_inbound(&self, json: &str) -> Result<String>;
+    async fn route_inbound(&self, raw_json: &str) -> Result<String>;
 }
-
 
 /// Default Router Implementation
 pub struct InboundRouter<S: SessionStore + Send + Sync> {
     pub sessions: S,
+    pub replay: ReplayProtector,
 }
 
 impl<S: SessionStore + Send + Sync> InboundRouter<S> {
     pub fn new(sessions: S) -> Self {
-        Self { sessions }
+        Self {
+            sessions,
+            replay: ReplayProtector::default(),
+        }
     }
 }
 
 #[async_trait]
 impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
-    /// Top-level router entry point
-    async fn route_inbound(&self, json: &str) -> Result<String> {
-        log_rx(json);
+    async fn route_inbound(&self, raw_json: &str) -> Result<String> {
+        log_rx(raw_json);
 
         // ------------------------------------------------------
-        // 1. Parse + classify
+        // 1. Decode + classify (via codec_tx)
         // ------------------------------------------------------
-        let (metadata, message) = match classify_message(json) {
+        let (metadata, message) = match classify_message(raw_json) {
             Ok(v) => v,
             Err(e) => {
-                let err = make_protocol_error(None, "INVALID_JSON", e);
+                let err = codec_tx::make_protocol_error(None, "INVALID_JSON", e);
                 log_err(&err);
                 return Ok(encode_message(&TGPMessage::Error(err))?);
             }
         };
 
         // ------------------------------------------------------
-        // 2. Structural Validation (JSON-level)
+        // 2. Replay protection
         // ------------------------------------------------------
-        let structural = validate_and_classify_message(&metadata, &message);
-        if let TGPValidationResult::Reject(error_msg) = structural {
-            log_err(&error_msg);
-            return Ok(encode_message(&TGPMessage::Error(error_msg))?);
+        if self.replay.is_replay(&metadata.msg_id) {
+            let err = codec_tx::make_protocol_error(
+                metadata.correlation_id.clone(),
+                "REPLAY_DETECTED",
+                format!("Duplicate message ID: {}", metadata.msg_id),
+            );
+            log_err(&err);
+            return Ok(encode_message(&TGPMessage::Error(err))?);
         }
 
         // ------------------------------------------------------
-        // 3. Session Lookup (QUERY lazily creates)
+        // 3. Message validation (pure structural)
+        // ------------------------------------------------------
+        match validate_and_classify_message(&metadata, &message) {
+            codec_tx::TGPValidationResult::Reject(err) => {
+                log_err(&err);
+                return Ok(encode_message(&TGPMessage::Error(err))?);
+            }
+            codec_tx::TGPValidationResult::Accept => {}
+        }
+
+        // ------------------------------------------------------
+        // 4. Session lookup rules (TGP-00 §4)
         // ------------------------------------------------------
         let session = match &message {
             TGPMessage::Query(_) => {
-                // Lazy session start -- allowed only for QUERY
-                let sess = self.sessions.create_session(metadata.msg_id.clone()).await?;
-                log_session_created(&sess);
-                sess
+                // lazy new session
+                let s = self.sessions.create_session(metadata.msg_id.clone()).await?;
+                log_session_created(&s);
+                s
             }
 
             TGPMessage::Offer(o) => {
-                self.sessions.get_session(&o.query_id).await?
-                    .ok_or_else(|| anyhow!("Unknown session: {}", o.query_id))?
+                self.sessions
+                    .get_session(&o.query_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Unknown session for OFFER: {}", o.query_id))?
             }
 
             TGPMessage::Settle(s) => {
-                self.sessions.get_session(&s.query_or_offer_id).await?
-                    .ok_or_else(|| anyhow!("Unknown session: {}", s.query_or_offer_id))?
+                self.sessions
+                    .get_session(&s.query_or_offer_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Unknown session for SETTLE: {}", s.query_or_offer_id))?
             }
 
             TGPMessage::Error(e) => {
@@ -107,33 +136,41 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 } else {
                     None
                 }
-                .unwrap_or(TGPSession::ephemeral(&metadata.msg_id))
+                .unwrap_or_else(|| TGPSession::ephemeral(&metadata.msg_id))
             }
         };
 
         // ------------------------------------------------------
-        // 4. Dispatch by Message Type
+        // 5. Dispatch to pure handlers
         // ------------------------------------------------------
         let response = match message {
             TGPMessage::Query(q) => {
+                let span = tgp_span(&session.session_id, "QUERY");
+                let _enter = span.enter();
                 handle_inbound_query(&metadata, &session, q).await?
             }
 
             TGPMessage::Offer(o) => {
+                let span = tgp_span(&session.session_id, "OFFER");
+                let _enter = span.enter();
                 handle_inbound_offer(&metadata, &session, o).await?
             }
 
             TGPMessage::Settle(s) => {
+                let span = tgp_span(&session.session_id, "SETTLE");
+                let _enter = span.enter();
                 handle_inbound_settle(&metadata, &session, s).await?
             }
 
             TGPMessage::Error(e) => {
+                let span = tgp_span(&session.session_id, "ERROR");
+                let _enter = span.enter();
                 handle_inbound_error(&metadata, &session, e).await?
             }
         };
 
         // ------------------------------------------------------
-        // 5. Encode + return
+        // 6. Logging + encode
         // ------------------------------------------------------
         log_tx(&response);
         Ok(encode_message(&response)?)

@@ -1,11 +1,29 @@
-//! TBC Gateway – In-Memory Gateway Layer
+//! Transaction Border Controller (TBC) Gateway
 //!
-//! This crate exposes an in-memory API for handling TGP-QUERY
-//! flows and settlement notifications.
+//! This crate implements the gateway-side runtime of the TBC ecosystem,
+//! responsible for:
+//!   • receiving inbound TGP-00 messages
+//!   • parsing & classification (via tbc-core + codec_tx.rs)
+//!   • policy enforcement via handlers
+//!   • session lifecycle management
+//!   • structured logging
+//!   • emitting outbound protocol-compliant TGP messages
+//!
+//! Architectural alignment:
+//!   • Mirrors SIP-RFC3261 decomposition (transport ↔ parsing ↔ routing)
+//!   • All serialization lives in `codec_tx.rs`
+//!   • All protocol grammar lives in `tbc-core/tgp/protocol.rs`
+//!   • The router is a pure control-plane state engine
+//!
+//! This crate does *not* contain business logic, settlement logic,
+//! or economic-layer responsibilities -- those live in handlers and
+//! the CoreProver / Layer-8 settlement stack.
 
-pub mod gateway;
-pub mod handlers;
-pub mod validation;
-pub mod signing;
+pub mod router;        // Inbound TGP routing engine
+pub mod handlers;      // Handler layer implementations (QUERY/OFFER/SETTLE/ERROR)
+pub mod logging;       // Structured + colorized TGP logs
+pub mod codec_tx;      // NEW -- parsing, classification, metadata construction
+pub mod error;         // Future: gateway-specific errors (optional)
 
-pub use gateway::TbcGateway;
+// Re-exports for convenience
+pub use router::{InboundRouter, TGPInboundRouter};

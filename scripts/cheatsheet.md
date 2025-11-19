@@ -88,7 +88,7 @@ git reset —hard origin/main
 ```bash
 git pull origin main —rebase
 ```
-
+tree -L 4 crates > tree_creates.txt
 —
 
 ## 🧭 Simulation Test Shortcuts

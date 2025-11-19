@@ -84,7 +84,7 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // ------------------------------------------------------
         // 2. Replay protection
         // ------------------------------------------------------
-        if self.replay.is_replay(&metadata.msg_id) {
+        if !self.replay.check_or_insert(&metadata.msg_id) {
             let err = codec_tx::make_protocol_error(
                 metadata.correlation_id.clone(),
                 "REPLAY_DETECTED",
@@ -170,9 +170,10 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         };
 
         // ------------------------------------------------------
-        // 6. Logging + encode
+        // 6. Encode + logging
         // ------------------------------------------------------
-        log_tx(&response);
-        Ok(encode_message(&response)?)
+        let response_json = encode_message(&response)?;
+        log_tx(&response_json);
+        Ok(response_json)
     }
 }

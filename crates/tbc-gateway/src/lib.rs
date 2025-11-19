@@ -1,15 +1,11 @@
-//! TBC Gateway - TGP Implementation
+//! TBC Gateway – In-Memory Gateway Layer
+//!
+//! This crate exposes an in-memory API for handling TGP-QUERY
+//! flows and settlement notifications.
 
-pub mod router;
-pub mod agent;
+pub mod gateway;
+pub mod handlers;
+pub mod validation;
+pub mod signing;
 
-pub use router::Router;
-pub use agent::Agent;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub use gateway::TbcGateway;

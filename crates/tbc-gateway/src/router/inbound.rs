@@ -23,6 +23,7 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use std::sync::Arc;
+use serde_json::json;
 
 use tbc_core::{
     codec_tx::{
@@ -34,7 +35,7 @@ use tbc_core::{
         TGPValidationResult,
     },
     protocol::{TGPMessage, make_protocol_error},
-    tgp::state::{TGPSession, SessionStore},
+    tgp::state::{TGPSession, TGPState, SessionStore},
 };
 
 use crate::handlers::{
@@ -86,39 +87,39 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         };
 
         // ------------------------------------------------------
-// 2. Replay protection
-// ------------------------------------------------------
-if !self.replay.check_or_insert(&metadata.msg_id) {
-    let err = make_protocol_error(
-        metadata.correlation_id.clone(),
-        "REPLAY_DETECTED",
-        format!("Duplicate message ID: {}", metadata.msg_id),
-    );
-    log_err(&err);
+        // 2. Replay protection
+        // ------------------------------------------------------
+        if !self.replay.check_or_insert(&metadata.msg_id) {
+            let err = make_protocol_error(
+                metadata.correlation_id.clone(),
+                "REPLAY_DETECTED",
+                format!("Duplicate message ID: {}", metadata.msg_id),
+            );
+            log_err(&err);
 
-    let encoded = encode_message(&TGPMessage::Error(err))
-        .map_err(|e| anyhow!("encode error: {}", e))?;
+            let encoded = encode_message(&TGPMessage::Error(err))
+                .map_err(|e| anyhow!("encode error: {}", e))?;
 
-    return Ok(encoded);
-} 
+            return Ok(encoded);
+        } 
 
         // ------------------------------------------------------
-// 3. Structural message validation
-// ------------------------------------------------------
-match validate_and_classify_message(&metadata, &message) {
-    TGPValidationResult::Reject(err) => {
-        log_err(&err);
+        // 3. Structural message validation
+        // ------------------------------------------------------
+        match validate_and_classify_message(&metadata, &message) {
+            TGPValidationResult::Reject(err) => {
+                log_err(&err);
 
-        let encoded = encode_message(&TGPMessage::Error(err))
-            .map_err(|e| anyhow!("encode error: {}", e))?;
+                let encoded = encode_message(&TGPMessage::Error(err))
+                    .map_err(|e| anyhow!("encode error: {}", e))?;
 
-        return Ok(encoded);
-    }
+                return Ok(encoded);
+            }
 
-    TGPValidationResult::Accept => {
-        // Validation OK
-    }
-}
+            TGPValidationResult::Accept => {
+                // Validation OK
+            }
+        }
 
         // ------------------------------------------------------
         // 4. Session lookup rules (TGP-00 §4)
@@ -185,10 +186,85 @@ match validate_and_classify_message(&metadata, &message) {
         };
 
         // ------------------------------------------------------
-        // 6. Encode + logging
+        // 6. State transition + persistence
+        //    (Documented in handler comments: "router performs transitions")
+        // ------------------------------------------------------
+        let mut session = session; // Make mutable for transitions
+        
+        match (&message, &response) {
+            // Query → QuerySent (successful OFFER response)
+            (TGPMessage::Query(_), TGPMessage::Offer(_)) => {
+                if session.state == TGPState::Idle {
+                    session.transition(TGPState::QuerySent)?;
+                    self.sessions.update_session(&session).await?;
+                }
+            }
+            
+            // Offer received → OfferReceived
+            (TGPMessage::Offer(_), TGPMessage::Offer(_)) => {
+                if session.state == TGPState::QuerySent {
+                    session.transition(TGPState::OfferReceived)?;
+                    self.sessions.update_session(&session).await?;
+                }
+            }
+            
+            // Settle → Finalizing → Settled/Errored
+            (TGPMessage::Settle(s), TGPMessage::Settle(_)) => {
+                match session.state {
+                    TGPState::OfferReceived | TGPState::AcceptSent => {
+                        // Move to Finalizing first
+                        session.transition(TGPState::Finalizing)?;
+                        self.sessions.update_session(&session).await?;
+                        
+                        // Then immediately finalize based on success flag
+                        if s.success {
+                            session.transition(TGPState::Settled)?;
+                        } else {
+                            session.transition(TGPState::Errored)?;
+                        }
+                        self.sessions.update_session(&session).await?;
+                    }
+                    TGPState::Finalizing => {
+                        // Already finalizing, just complete
+                        if s.success {
+                            session.transition(TGPState::Settled)?;
+                        } else {
+                            session.transition(TGPState::Errored)?;
+                        }
+                        self.sessions.update_session(&session).await?;
+                    }
+                    _ => {
+                        // Invalid state for SETTLE - log warning
+                        warn(
+                            "SETTLE received in invalid state",
+                            json!({
+                                "session_id": session.session_id,
+                                "current_state": format!("{:?}", session.state),
+                                "message_id": s.id
+                            })
+                        );
+                    }
+                }
+            }
+            
+            // Any error response → Errored state
+            (_, TGPMessage::Error(_)) => {
+                if !session.is_terminal() {
+                    session.force_error();
+                    self.sessions.update_session(&session).await?;
+                }
+            }
+            
+            _ => {
+                // No state transition needed (e.g., error echo)
+            }
+        }
+
+        // ------------------------------------------------------
+        // 7. Encode + logging
         // ------------------------------------------------------
         let response_json = encode_message(&response)
-    .map_err(|e| anyhow!("encode error: {}", e))?;
+            .map_err(|e| anyhow!("encode error: {}", e))?;
         log_tx(&response_json);
         Ok(response_json)
     }

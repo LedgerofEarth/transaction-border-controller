@@ -197,8 +197,7 @@ impl OfferMessage {
 
         Ok(())
     }
-}
-
+    
     pub fn new(
         id: impl Into<String>,
         query_id: impl Into<String>,

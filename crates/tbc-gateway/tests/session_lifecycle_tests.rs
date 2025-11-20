@@ -147,7 +147,8 @@ async fn test_error_response_forces_errored_state() {
 #[tokio::test]
 async fn test_error_without_correlation_creates_ephemeral() {
     let store = InMemorySessionStore::new();
-    let router = InboundRouter::new(store);
+    let router = InboundRouter::new(store.clone());  // ✅ Clone so we can use store later
+
     
     // Send ERROR with no correlation_id
     let error = sample_error(None);

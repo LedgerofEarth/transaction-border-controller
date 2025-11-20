@@ -116,7 +116,7 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         let session = match &message {
             // Query → create + persist new session
             TGPMessage::Query(_) => {
-                let s = self.sessions.create_session(metadata.msg_id.clone()).await?;
+                let s = self.sessions.update_session(&s).await?;
                 self.sessions.put_session(&s.session_id, s.clone()).await?;
                 log_session_created(&s);
                 s

@@ -3,10 +3,10 @@
 //! This crate provides core types and traits for the Transaction Border Controller.
 
 // Gateway module is in tbc-gateway crate, not here
-// pub mod gateway;
+
 pub mod protocol;
 pub mod tgp;
-// pub mod types;
+pub mod codec_tx
 
 // pub use gateway::Gateway;
 // pub use types::*;

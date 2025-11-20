@@ -3,21 +3,14 @@
 //! Receives:  QUERY
 //! Returns:   OFFER  (or ERROR)
 //!
-//! Responsibilities:
-//!   • validate QUERY semantics beyond structural validation
-//!   • determine recommended settlement path (escrow vs direct)
-//!   • synthesize OFFER message
-//!   • provide economic envelope & zk_required guidance
-//!   • no session mutation (SIP-style purity)
-//!
 //! NOTE: Session transitions occur in the Router, not in handlers.
 
 use anyhow::Result;
 
 use tbc_core::{
     protocol::{QueryMessage, OfferMessage, TGPMessage, make_protocol_error},
+    codec_tx::TGPMetadata,
     tgp::{
-        codec_tx::TGPMetadata,
         state::TGPSession,
         types::{EconomicEnvelope, ZkProfile},
     },
@@ -30,12 +23,12 @@ pub async fn handle_inbound_query(
     meta: &TGPMetadata,
     _session: &TGPSession,
     q: QueryMessage,
-) -> Result<TGPMessage> 
+) -> Result<TGPMessage>
 {
     log_handler("QUERY");
 
     // ----------------------------------------------------------
-    // 1. Application-layer checks (controller policy stub)
+    // 1. Application-layer checks
     // ----------------------------------------------------------
     if !asset_supported(&q.asset) {
         let err = make_protocol_error(
@@ -47,11 +40,10 @@ pub async fn handle_inbound_query(
     }
 
     // ----------------------------------------------------------
-    // 2. Determine settlement path (escrow vs direct)
+    // 2. Determine settlement path
     // ----------------------------------------------------------
     let escrow_required = matches!(q.zk_profile, ZkProfile::Required);
 
-    // Placeholder contract selection logic
     let coreprover_contract = if escrow_required {
         Some("0x000000000000000000000000000000000000F00D".to_string())
     } else {
@@ -67,12 +59,12 @@ pub async fn handle_inbound_query(
         asset: q.asset.clone(),
         amount: q.amount,
         coreprover_contract,
-        session_id: Some(meta.msg_id.clone()),   // Router enforces canonical mapping
+        session_id: Some(meta.msg_id.clone()),
         zk_required: escrow_required,
         economic_envelope: EconomicEnvelope::new(50),
     };
 
-    // Validate OFFER defensively
+    // Defensive OFFER validation
     if let Err(e) = offer.validate() {
         let err = make_protocol_error(
             Some(q.id.clone()),
@@ -89,7 +81,7 @@ pub async fn handle_inbound_query(
 }
 
 // ----------------------------------------------------------
-// Internal placeholder policy hooks
+// Internal policy stub
 // ----------------------------------------------------------
 fn asset_supported(asset: &str) -> bool {
     matches!(asset, "USDC" | "USDT" | "ETH" | "DAI")

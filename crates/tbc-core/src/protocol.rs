@@ -170,18 +170,34 @@ pub struct OfferMessage {
 
 impl OfferMessage {
     pub fn validate(&self) -> Result<(), String> {
+        // ----------------------------------------------------------
+        // 1. Minimal required fields (TGP-00 §3.2)
+        // ----------------------------------------------------------
         validate_non_empty(&self.id, "id")?;
         validate_non_empty(&self.query_id, "query_id")?;
         validate_non_empty(&self.asset, "asset")?;
         validate_positive_amount(self.amount, "amount")?;
 
+        // ----------------------------------------------------------
+        // 2. Optional coreprover_contract
+        // ----------------------------------------------------------
         if let Some(ref addr) = self.coreprover_contract {
             validate_address(addr, "coreprover_contract")?;
         }
 
-        self.economic_envelope.validate()?;
+        // ----------------------------------------------------------
+        // 3. OPTIONAL economic envelope for inbound offers
+        //    Controller-generated offers *will* include this.
+        // ----------------------------------------------------------
+        // Allow missing envelope in inbound OFFERs.
+        if self.economic_envelope.amount > 0 {
+            // Validate only if present / non-zero
+            self.economic_envelope.validate()?;
+        }
+
         Ok(())
     }
+}
 
     pub fn new(
         id: impl Into<String>,

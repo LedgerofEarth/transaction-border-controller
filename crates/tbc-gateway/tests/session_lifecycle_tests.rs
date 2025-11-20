@@ -8,7 +8,7 @@
 //!   • Replay protection integration
 
 use tbc_gateway::{InboundRouter, TGPInboundRouter, InMemorySessionStore};
-use tbc_core::tgp::state::TGPState;
+use tbc_core::tgp::state::{TGPState, SessionStore};
 
 // ============================================================================
 // Test Fixtures

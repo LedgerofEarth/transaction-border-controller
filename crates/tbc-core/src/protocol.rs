@@ -25,6 +25,8 @@
 //! appears here. This file is deliberately "spec-pure."
 
 use serde::{Deserialize, Serialize};
+use crate::protocol::make_protocol_error;
+use crate::protocol::ErrorMessage;
 use crate::tgp::types::{ZkProfile, EconomicEnvelope, SettleSource};
 use crate::tgp::validation::{
     validate_non_empty,

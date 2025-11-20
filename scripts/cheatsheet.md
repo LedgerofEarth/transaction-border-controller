@@ -69,6 +69,24 @@ cat output.txt
 cargo test --workspace --all-targets --all-features > test_output.txt 2>&1
 
 —
+TS=$(date +"%Y-%m-%d_%H-%M-%S") && \
+cargo bench --bench replay_bench --quiet -- --noplot \
+    > bench_logs/bench_$TS.txt 2>&1 && \
+cat bench_logs/bench_$TS.txt
+
+prints benchmark time stamped files to /bench_logs/
+
+Screen shows only numbers...file captures everything
+
+[ TS=$(date +"%Y-%m-%d_%H-%M-%S") && \
+cargo bench --bench tgp_validation_bench --quiet -- --noplot \
+    > bench_logs/full_$TS.txt 2>&1 && \
+grep -E "Benchmarking|time:" bench_logs/full_$TS.txt | tee bench_logs/timings_$TS.txt. ]
+
+Only benchmark times
+
+cargo bench --bench replay_bench --quiet -- --noplot \
+  | grep "time:"
 
 ## 🔍 Git & Repo Management
 

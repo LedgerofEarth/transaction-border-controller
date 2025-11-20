@@ -1,0 +1,11 @@
+{
+  "phase": "QUERY",
+  "id": "q-demo-001",
+  "from": "buyer://alice",
+  "to": "seller://bob",
+  "asset": "USDC",
+  "amount": 1000000,
+  "escrow_from_402": false,
+  "escrow_contract_from_402": null,
+  "zk_profile": "Optional"
+}

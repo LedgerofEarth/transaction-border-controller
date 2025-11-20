@@ -186,18 +186,26 @@ impl OfferMessage {
         }
 
         // ----------------------------------------------------------
-        // 3. OPTIONAL economic envelope for inbound offers
-        //    Controller-generated offers *will* include this.
+        // 3. OPTIONAL economic envelope
+        //
+        // Inbound OFFERs may contain an empty envelope:
+        //     { "max_fees_bps": 0, "expiry": null }
+        //
+        // Only validate when the envelope is *meaningful*:
+        //     - max_fees_bps > 0
+        //     - OR expiry is Some(_)
         // ----------------------------------------------------------
-        // Allow missing envelope in inbound OFFERs.
-        if self.economic_envelope.amount > 0 {
-            // Validate only if present / non-zero
+        let envelope_empty =
+            self.economic_envelope.max_fees_bps == 0 &&
+            self.economic_envelope.expiry.is_none();
+
+        if !envelope_empty {
             self.economic_envelope.validate()?;
         }
 
         Ok(())
     }
-    
+        
     pub fn new(
         id: impl Into<String>,
         query_id: impl Into<String>,

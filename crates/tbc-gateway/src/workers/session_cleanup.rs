@@ -53,7 +53,7 @@ pub async fn run_cleanup_worker<S: SessionStore>(
         let sessions = store.list_sessions(config.batch_size).await?;
         let mut removed = 0;
         
-        for session in sessions {
+        for session in &sessions {  // ✅ CORRECTED: Borrow instead of consume
             let age = session.age();
             let should_remove = if session.is_terminal() {
                 age > config.max_terminal_age
@@ -81,7 +81,7 @@ pub async fn run_cleanup_worker<S: SessionStore>(
                 "Cleanup cycle complete",
                 serde_json::json!({
                     "sessions_removed": removed,
-                    "sessions_scanned": sessions.len(),
+                    "sessions_scanned": sessions.len(),  // ✅ Now valid - sessions not moved
                 })
             );
         }
@@ -111,7 +111,7 @@ mod tests {
         
         // Manually trigger cleanup logic
         let sessions = store.list_sessions(100).await.unwrap();
-        for s in sessions {
+        for s in &sessions {  // ✅ CORRECTED: Use .iter() via &
             if s.is_terminal() && s.age() > config.max_terminal_age {
                 store.delete_session(&s.session_id).await.unwrap();
             }

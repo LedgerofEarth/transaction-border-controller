@@ -1,6 +1,6 @@
 //! In-memory session storage for development/testing
 //!
-//! This implementation uses RwLock<HashMap> for thread-safe access.
+//! This implementation uses Arc<RwLock<HashMap>> for thread-safe access.
 //! NOT recommended for production (no persistence, no clustering).
 //!
 //! For production, use:
@@ -10,17 +10,22 @@
 use async_trait::async_trait;
 use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use tbc_core::tgp::state::{TGPSession, SessionStore};
 
+/// Thread-safe, cloneable in-memory session store.
+///
+/// Uses Arc<RwLock<HashMap>> so clones share the same underlying storage.
+/// This allows the store to be shared across router instances and tests.
+#[derive(Clone)]
 pub struct InMemorySessionStore {
-    sessions: RwLock<HashMap<String, TGPSession>>,
+    sessions: Arc<RwLock<HashMap<String, TGPSession>>>,
 }
 
 impl InMemorySessionStore {
     pub fn new() -> Self {
         Self {
-            sessions: RwLock::new(HashMap::new()),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     
@@ -116,5 +121,18 @@ mod tests {
         
         let sessions = store.list_sessions(10).await.unwrap();
         assert_eq!(sessions.len(), 2);
+    }
+    
+    #[tokio::test]
+    async fn test_clone_shares_storage() {
+        let store = InMemorySessionStore::new();
+        let store_clone = store.clone();
+        
+        // Create session via original
+        store.create_session("shared-1".to_string()).await.unwrap();
+        
+        // Should be visible via clone
+        let retrieved = store_clone.get_session("shared-1").await.unwrap();
+        assert!(retrieved.is_some(), "Clone should share same storage");
     }
 }

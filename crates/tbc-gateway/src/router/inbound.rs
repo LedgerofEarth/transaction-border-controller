@@ -82,7 +82,7 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 let err = make_protocol_error(None, "INVALID_JSON", e);
                 log_err(&err);
                 return encode_message(&TGPMessage::Error(err))
-    .map_err(|e| anyhow!("encode error: {}", e));
+                    .map_err(|e| anyhow!("encode error: {}", e));
             }
         };
 
@@ -101,7 +101,7 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 .map_err(|e| anyhow!("encode error: {}", e))?;
 
             return Ok(encoded);
-        } 
+        }
 
         // ------------------------------------------------------
         // 3. Structural message validation
@@ -159,29 +159,29 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // ------------------------------------------------------
         // 5. Dispatch to pure handlers
         // ------------------------------------------------------
-        let response = match message {
+        let response = match &message {
             TGPMessage::Query(q) => {
                 let span = tgp_span(&session.session_id, "QUERY");
                 let _enter = span.enter();
-                handle_inbound_query(&metadata, &session, q).await?
+                handle_inbound_query(&metadata, &session, q.clone()).await?
             }
 
             TGPMessage::Offer(o) => {
                 let span = tgp_span(&session.session_id, "OFFER");
                 let _enter = span.enter();
-                handle_inbound_offer(&metadata, &session, o).await?
+                handle_inbound_offer(&metadata, &session, o.clone()).await?
             }
 
             TGPMessage::Settle(s) => {
                 let span = tgp_span(&session.session_id, "SETTLE");
                 let _enter = span.enter();
-                handle_inbound_settle(&metadata, &session, s).await?
+                handle_inbound_settle(&metadata, &session, s.clone()).await?
             }
 
             TGPMessage::Error(e) => {
                 let span = tgp_span(&session.session_id, "ERROR");
                 let _enter = span.enter();
-                handle_inbound_error(&metadata, &session, e).await?
+                handle_inbound_error(&metadata, &session, e.clone()).await?
             }
         };
 
@@ -189,10 +189,9 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // 6. State transition + persistence
         //    (Documented in handler comments: "router performs transitions")
         // ------------------------------------------------------
-        let mut session = session; // Make mutable for transitions
+        let mut session = session;
         
         match (&message, &response) {
-            // Query → QuerySent (successful OFFER response)
             (TGPMessage::Query(_), TGPMessage::Offer(_)) => {
                 if session.state == TGPState::Idle {
                     session.transition(TGPState::QuerySent)?;
@@ -200,7 +199,6 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 }
             }
             
-            // Offer received → OfferReceived
             (TGPMessage::Offer(_), TGPMessage::Offer(_)) => {
                 if session.state == TGPState::QuerySent {
                     session.transition(TGPState::OfferReceived)?;
@@ -208,15 +206,12 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 }
             }
             
-            // Settle → Finalizing → Settled/Errored
             (TGPMessage::Settle(s), TGPMessage::Settle(_)) => {
                 match session.state {
                     TGPState::OfferReceived | TGPState::AcceptSent => {
-                        // Move to Finalizing first
                         session.transition(TGPState::Finalizing)?;
                         self.sessions.update_session(&session).await?;
                         
-                        // Then immediately finalize based on success flag
                         if s.success {
                             session.transition(TGPState::Settled)?;
                         } else {
@@ -225,7 +220,6 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                         self.sessions.update_session(&session).await?;
                     }
                     TGPState::Finalizing => {
-                        // Already finalizing, just complete
                         if s.success {
                             session.transition(TGPState::Settled)?;
                         } else {
@@ -234,7 +228,6 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                         self.sessions.update_session(&session).await?;
                     }
                     _ => {
-                        // Invalid state for SETTLE - log warning
                         warn(
                             "SETTLE received in invalid state",
                             json!({
@@ -247,7 +240,6 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 }
             }
             
-            // Any error response → Errored state
             (_, TGPMessage::Error(_)) => {
                 if !session.is_terminal() {
                     session.force_error();
@@ -255,9 +247,7 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 }
             }
             
-            _ => {
-                // No state transition needed (e.g., error echo)
-            }
+            _ => {}
         }
 
         // ------------------------------------------------------

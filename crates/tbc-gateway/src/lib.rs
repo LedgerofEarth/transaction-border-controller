@@ -23,9 +23,11 @@ pub mod router;        // Inbound TGP routing engine
 pub mod handlers;      // Handler layer implementations (QUERY/OFFER/SETTLE/ERROR)
 pub mod logging;       // Structured + colorized TGP logs
 pub mod store;         // Session storage implementations
+pub mod workers;       // Background workers (cleanup, monitoring)
 //pub mod codec_tx;      // NEW -- parsing, classification, metadata construction
 // pub mod error;         // Future: gateway-specific errors (optional)
 
 // Re-exports for convenience
 pub use router::{InboundRouter, TGPInboundRouter};
 pub use store::InMemorySessionStore;
+pub use workers::{run_cleanup_worker, CleanupConfig};

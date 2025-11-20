@@ -14,22 +14,24 @@
 
 use anyhow::Result;
 
-use tbc_core::tgp::{
+use tbc_core::{
     protocol::{QueryMessage, OfferMessage, TGPMessage, make_protocol_error},
-    types::{EconomicEnvelope, ZkProfile},
-    codec_tx::TGPMetadata,
+    tgp::{
+        codec_tx::TGPMetadata,
+        state::TGPSession,
+        types::{EconomicEnvelope, ZkProfile},
+    },
 };
 
 use crate::logging::*;
 
-
 /// Handle inbound QUERY → returns OFFER
 pub async fn handle_inbound_query(
     meta: &TGPMetadata,
-    _session: &tbc_core::tgp::state::TGPSession,
+    _session: &TGPSession,
     q: QueryMessage,
-) -> Result<TGPMessage> {
-
+) -> Result<TGPMessage> 
+{
     log_handler("QUERY");
 
     // ----------------------------------------------------------
@@ -47,11 +49,7 @@ pub async fn handle_inbound_query(
     // ----------------------------------------------------------
     // 2. Determine settlement path (escrow vs direct)
     // ----------------------------------------------------------
-    let escrow_required = match q.zk_profile {
-        ZkProfile::Required => true,
-        ZkProfile::Optional => false,
-        ZkProfile::None => false,
-    };
+    let escrow_required = matches!(q.zk_profile, ZkProfile::Required);
 
     // Placeholder contract selection logic
     let coreprover_contract = if escrow_required {
@@ -90,11 +88,9 @@ pub async fn handle_inbound_query(
     Ok(TGPMessage::Offer(offer))
 }
 
-
 // ----------------------------------------------------------
 // Internal placeholder policy hooks
 // ----------------------------------------------------------
-
 fn asset_supported(asset: &str) -> bool {
     matches!(asset, "USDC" | "USDT" | "ETH" | "DAI")
 }

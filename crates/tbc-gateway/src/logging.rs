@@ -1,30 +1,29 @@
 //! Unified logging module for TBC Gateway
 //!
-//! This module implements telecom-grade structured logging for all TGP
-//! operations. It supports:
-//!   • JSON logging mode (TBC_LOG_FORMAT=json)
-//!   • ANSI-safe color output for terminals
-//!   • RFC3339 timestamps with microseconds (SIP-style diagnostics)
-//!   • State-transition visualization (Observer pattern)
-//!   • Full TGP metadata logging hooks
-//!   • Router-level RX/TX logs
-//!
-//! Design notes:
-//!   • SIP RFC3261 encourages splitting parsing, transaction,
-//!     and transport layers -- but logging remains centralized.
-//!   • Following that guidance, TBC centralizes all visibility here,
-//!     while keeping business logic clean.
+//! Provides:
+//!   • JSON logging (TBC_LOG_FORMAT=json)
+//!   • ANSI color output for terminals
+//!   • RFC3339 timestamps w/ microseconds
+//!   • RX/TX logs
+//!   • Session transition logs (observer)
+//!   • TGP handler logs
 
-use ansi_term::Colour::*;
-use chrono::Utc;
+// ============================================================================
+// Imports
+// ============================================================================
+
+use ansi_term::Colour::{Red, Yellow, Cyan, Purple, White, Green, Blue};
+use chrono::{Utc, SecondsFormat};
 use serde_json::json;
 use std::env;
+
+use tbc_core::protocol::ErrorMessage;     // FIXED: correct module path
+use tbc_core::tgp::state::TGPSession;    // for session logging
 
 // ============================================================================
 // Logging Macros
 // ============================================================================
 
-/// Emit error-level log with structured fields
 #[macro_export]
 macro_rules! log_error {
     (target: $target:expr, $fields:tt, $msg:expr) => {
@@ -32,7 +31,6 @@ macro_rules! log_error {
     };
 }
 
-/// Emit info-level log with structured fields
 #[macro_export]
 macro_rules! log_info {
     (target: $target:expr, $fields:tt, $msg:expr) => {
@@ -40,19 +38,28 @@ macro_rules! log_info {
     };
 }
 
-/// Whether JSON mode is enabled (TBC_LOG_FORMAT=json)
+// ============================================================================
+// JSON Mode Detection
+// ============================================================================
+
 fn json_mode() -> bool {
     env::var("TBC_LOG_FORMAT")
         .map(|v| v.to_lowercase() == "json")
         .unwrap_or(false)
 }
 
-/// RFC3339 timestamp w/ microseconds (SIP-grade granularity)
+// ============================================================================
+// Timestamp
+// ============================================================================
+
 fn ts() -> String {
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true)
+    Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true)
 }
 
-/// Emit a unified log entry
+// ============================================================================
+// Core Log Event
+// ============================================================================
+
 pub fn log_event(level: &str, msg: &str, fields: serde_json::Value) {
     if json_mode() {
         let payload = json!({
@@ -65,7 +72,6 @@ pub fn log_event(level: &str, msg: &str, fields: serde_json::Value) {
         return;
     }
 
-    // ANSI fallback mode
     let lvl = match level {
         "ERROR" => Red.paint("ERROR").to_string(),
         "WARN"  => Yellow.paint("WARN").to_string(),
@@ -78,7 +84,10 @@ pub fn log_event(level: &str, msg: &str, fields: serde_json::Value) {
     println!("[{}] {} | {}", ts(), lvl, msg);
 }
 
-/// Convenience wrappers
+// ============================================================================
+// Convenience Wrappers
+// ============================================================================
+
 pub fn info(msg: &str, fields: serde_json::Value) {
     log_event("INFO", msg, fields);
 }
@@ -99,28 +108,19 @@ pub fn trace(msg: &str, fields: serde_json::Value) {
     log_event("TRACE", msg, fields);
 }
 
-// =============================================================================
+// ============================================================================
 // RX / TX Logging
-// =============================================================================
+// ============================================================================
 
-/// Log raw inbound JSON (pre-parse)
-pub fn log_rx(json: &str) {
-    trace(
-        "Inbound JSON",
-        json!({ "payload": json })
-    );
+pub fn log_rx(json_raw: &str) {
+    trace("Inbound JSON", json!({ "payload": json_raw }));
 }
 
-/// Log outbound response JSON
-pub fn log_tx(json: &str) {
-    trace(
-        "Outbound JSON",
-        json!({ "payload": json })
-    );
+pub fn log_tx(json_raw: &str) {
+    trace("Outbound JSON", json!({ "payload": json_raw }));
 }
 
-/// Log protocol-level error before it is encoded
-pub fn log_err(err: &tbc_core::tgp::protocol::ErrorMessage) {
+pub fn log_err(err: &ErrorMessage) {
     error(
         "Protocol Error",
         json!({
@@ -132,12 +132,11 @@ pub fn log_err(err: &tbc_core::tgp::protocol::ErrorMessage) {
     );
 }
 
-// =============================================================================
+// ============================================================================
 // Session & Handler Logging
-// =============================================================================
+// ============================================================================
 
-/// Log session creation event
-pub fn log_session_created(session: &tbc_core::tgp::state::TGPSession) {
+pub fn log_session_created(session: &TGPSession) {
     info(
         "session-created",
         json!({
@@ -148,17 +147,10 @@ pub fn log_session_created(session: &tbc_core::tgp::state::TGPSession) {
     );
 }
 
-/// Log handler entry point
 pub fn log_handler(phase: &str) {
-    debug(
-        "handler-entry",
-        json!({ "phase": phase })
-    );
+    debug("handler-entry", json!({ "phase": phase }));
 }
 
-/// Create tracing span for TGP handler
-///
-/// Requires tracing crate in Cargo.toml
 pub fn tgp_span(session_id: &str, phase: &str) -> tracing::Span {
     tracing::info_span!(
         "tgp-handler",
@@ -167,19 +159,10 @@ pub fn tgp_span(session_id: &str, phase: &str) -> tracing::Span {
     )
 }
 
-// =============================================================================
+// ============================================================================
 // State Transition Logging (Observer Pattern)
-// =============================================================================
+// ============================================================================
 
-/// Log state transitions (TGPSession)
-///
-/// Called by state.rs via an observer.
-/// This keeps `state.rs` clean and side-effect-free.
-///
-/// Colors:
-///   • from-state = Green
-///   • to-state   = Blue
-///   • action tag = Cyan
 pub fn log_state_transition(
     session_id: &str,
     from: &str,
@@ -214,7 +197,6 @@ pub fn log_state_transition(
     );
 }
 
-/// Dump full SSO (state storage object) for debugging
 pub fn trace_sso(session_id: &str, sso_json: serde_json::Value) {
     trace(
         "SSO dump",

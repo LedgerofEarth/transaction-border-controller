@@ -11,14 +11,18 @@
 
 use anyhow::Result;
 
-use tbc_core::tgp::{
-    protocol::{OfferMessage, TGPMessage, make_protocol_error},
-    codec_tx::TGPMetadata,
+use tbc_core::codec_tx::{
+    TGPMetadata,
+    classify_message,
+    encode_message,
+    validate_and_classify_message,
+    ReplayProtector,
+    TGPValidationResult,
 };
 
 use crate::logging::*;
 
-
+/// Handle inbound OFFER → returns OFFER or ERROR
 pub async fn handle_inbound_offer(
     meta: &TGPMetadata,
     _session: &tbc_core::tgp::state::TGPSession,
@@ -46,7 +50,7 @@ pub async fn handle_inbound_offer(
         let err = make_protocol_error(
             Some(o.id.clone()),
             "INVALID_OFFER",
-            e,
+            format!("Invalid OFFER: {}", e),
         );
         return Ok(TGPMessage::Error(err));
     }
@@ -56,7 +60,6 @@ pub async fn handle_inbound_offer(
     // ----------------------------------------------------------
     Ok(TGPMessage::Offer(o))
 }
-
 
 fn policy_allow_inbound_offer() -> bool {
     false // default: disallow buyer → controller OFFER messages

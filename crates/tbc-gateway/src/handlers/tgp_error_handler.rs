@@ -12,17 +12,22 @@
 
 use anyhow::Result;
 
-use tbc_core::tgp::{
-    protocol::{ErrorMessage, TGPMessage},
-    codec_tx::TGPMetadata,
-    state::TGPSession,
+use tbc_core::codec_tx::{
+    TGPMetadata,
+    classify_message,
+    encode_message,
+    validate_and_classify_message,
+    ReplayProtector,
+    TGPValidationResult,
 };
 
-use crate::logging::*;
+use tbc_core::tgp::state::TGPSession;
+
+use crate::logging::{log_handler, log_err, log_info};
 
 /// Handle inbound ERROR message (echo + logging)
 pub async fn handle_inbound_error(
-    meta: &TGPMetadata,
+    _meta: &TGPMetadata,
     session: &TGPSession,
     e: ErrorMessage,
 ) -> Result<TGPMessage>
@@ -33,12 +38,11 @@ pub async fn handle_inbound_error(
     // 1. Defensive structural validation
     // ------------------------------------------------------
     if let Err(v) = e.validate() {
-        log_error!(
-            target: "tgp.error",
+        log_info!(
             {
-                "id": e.id,
+                "id": e.id.clone(),
                 "validation_error": v,
-                "correlation": e.correlation_id
+                "correlation": e.correlation_id.clone()
             },
             "Inbound ERROR failed structural validation"
         );
@@ -53,25 +57,23 @@ pub async fn handle_inbound_error(
     log_err(&e);
 
     log_info!(
-        target: "tgp.error",
         {
-            "id": e.id,
-            "code": e.code,
-            "correlation": e.correlation_id
+            "id": e.id.clone(),
+            "code": e.code.clone(),
+            "correlation": e.correlation_id.clone()
         },
         "Inbound ERROR recorded"
     );
 
     // ------------------------------------------------------
-    // 3. Optional correlation chain logging
+    // 3. Correlation chain logging
     // ------------------------------------------------------
     if let Some(cid) = &e.correlation_id {
         log_info!(
-            target: "tgp.error",
             {
-                "id": e.id,
-                "correlation": cid,
-                "session_id": session.session_id
+                "id": e.id.clone(),
+                "correlation": cid.clone(),
+                "session_id": session.session_id.clone()
             },
             "Correlation chain linked"
         );

@@ -13,7 +13,7 @@
 //! - [`QueryMessage`] - §3.1: Initiates capability or path query
 //! - [`OfferMessage`] - §3.2: Suggests viable route or settlement method
 //! - [`SettleMessage`] - §3.3: Reports settlement completion
-//! - [`ErrorMessage`] - §3.4: Notifies of protocol failure
+//! - [`ErrorMessage`] - §3.4: Notifies of protocol failureå
 //! - [`TGPMessage`] - Discriminated union of all message types
 //!
 //! # Examples

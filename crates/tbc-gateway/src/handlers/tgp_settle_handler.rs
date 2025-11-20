@@ -12,24 +12,31 @@
 //! SESSION TRANSITIONS:
 //!   The Router (not this handler) will:
 //!     • move OfferReceived → Finalizing
-//!     • Finalizing → Settled/Errored
+//!     • Finalizing → Settled / Errored
 //!
 //! This ensures purity + SIP-style separation.
 
 use anyhow::Result;
 
-use tbc_core::tgp::{
-    protocol::{SettleMessage, TGPMessage, make_protocol_error},
-    types::SettleSource,
-    codec_tx::TGPMetadata,
+use tbc_core::codec_tx::{
+    TGPMetadata,
+    classify_message,
+    encode_message,
+    validate_and_classify_message,
+    ReplayProtector,
+    TGPValidationResult,
 };
 
-use crate::logging::*;
+use tbc_core::tgp::types::SettleSource;
+use tbc_core::tgp::state::TGPSession;
+
+use crate::logging::{log_handler, log_info, log_err};
 
 
+/// Handle inbound SETTLE → returns SETTLE or ERROR
 pub async fn handle_inbound_settle(
-    meta: &TGPMetadata,
-    _session: &tbc_core::tgp::state::TGPSession,
+    _meta: &TGPMetadata,
+    _session: &TGPSession,
     s: SettleMessage,
 ) -> Result<TGPMessage> {
 
@@ -48,7 +55,7 @@ pub async fn handle_inbound_settle(
     }
 
     // ----------------------------------------------------------
-    // 2. tx-hash verification requirement
+    // 2. If reporter requires verification → require tx-hash
     // ----------------------------------------------------------
     if s.source.requires_verification() && s.layer8_tx.is_none() {
         let err = make_protocol_error(
@@ -56,15 +63,33 @@ pub async fn handle_inbound_settle(
             "SETTLEMENT_UNVERIFIED",
             "SETTLE requires tx-hash for this reporter type",
         );
+
+        log_info!(
+            {
+                "id": s.id.clone(),
+                "source": s.source.to_string(),
+                "reason": "tx-hash missing"
+            },
+            "Inbound SETTLE missing required tx-hash"
+        );
+
         return Ok(TGPMessage::Error(err));
     }
 
     // ----------------------------------------------------------
-    // 3. No chain verification here (delegated to MCP agent)
+    // 3. CoreProver chain verification is delegated to MCP agent
     // ----------------------------------------------------------
 
     // ----------------------------------------------------------
-    // 4. Echo SETTLE back to caller
+    // 4. Echo SETTLE back (SIP-style)
     // ----------------------------------------------------------
+    log_info!(
+        {
+            "id": s.id.clone(),
+            "source": s.source.to_string()
+        },
+        "Inbound SETTLE accepted and echoed"
+    );
+
     Ok(TGPMessage::Settle(s))
 }

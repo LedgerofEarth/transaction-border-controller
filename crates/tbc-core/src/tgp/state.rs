@@ -132,7 +132,7 @@ impl TGPState {
 // Session struct (SSO) (TGP-00 §13)
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TGPSession {
     pub session_id: String,
     pub state: TGPState,
@@ -153,6 +153,40 @@ pub struct TGPSession {
 
     #[serde(skip)]
     pub observer: Option<&'static dyn StateObserver>,
+}
+
+// Manual Debug implementation (skip observer field)
+impl std::fmt::Debug for TGPSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TGPSession")
+            .field("session_id", &self.session_id)
+            .field("state", &self.state)
+            .field("query_id", &self.query_id)
+            .field("offer_id", &self.offer_id)
+            .field("zk_must_verify", &self.zk_must_verify)
+            .field("source_domain", &self.source_domain)
+            .field("counterparty_domain", &self.counterparty_domain)
+            .field("created_at", &self.created_at)
+            .field("updated_at", &self.updated_at)
+            .field("timeout_at", &self.timeout_at)
+            .finish()
+    }
+}
+
+// Manual PartialEq implementation (skip observer field)
+impl PartialEq for TGPSession {
+    fn eq(&self, other: &Self) -> bool {
+        self.session_id == other.session_id
+            && self.state == other.state
+            && self.query_id == other.query_id
+            && self.offer_id == other.offer_id
+            && self.zk_must_verify == other.zk_must_verify
+            && self.source_domain == other.source_domain
+            && self.counterparty_domain == other.counterparty_domain
+            && self.created_at == other.created_at
+            && self.updated_at == other.updated_at
+            && self.timeout_at == other.timeout_at
+    }
 }
 
 impl TGPSession {

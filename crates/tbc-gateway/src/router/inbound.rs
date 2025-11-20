@@ -23,7 +23,7 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
-use tbc_core::tgp::{
+use tbc_core::{
     codec_tx::{
         classify_message,
         encode_message,
@@ -31,7 +31,7 @@ use tbc_core::tgp::{
         ReplayProtector,
     },
     protocol::TGPMessage,
-    state::{TGPSession, SessionStore},
+    tgp::{TGPSession, SessionStore},
 };
 
 use crate::handlers::{

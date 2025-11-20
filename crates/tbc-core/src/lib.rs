@@ -6,10 +6,10 @@
 // pub mod gateway;
 pub mod protocol;
 pub mod tgp;
-pub mod types;
+// pub mod types;
 
 // pub use gateway::Gateway;
-pub use types::*;
+// pub use types::*;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

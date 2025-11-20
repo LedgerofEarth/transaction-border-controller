@@ -1,16 +1,17 @@
 //! # Inbound Router (Controller-Side)
 //!
-//! Transaction Layer for the Transaction Border Controller.
+//! Transaction Layer controller for the Transaction Border Controller.
 //!
 //! Responsibilities:
 //!   • transport parsing (codec_tx)
-//!   • message classification (phase → handler)
-//!   • replay protection
 //!   • structural validation (TGP-00 §3)
-//!   • session lookup/update (TGP-00 §4)
+//!   • replay protection
+//!   • session creation/lookup (TGP-00 §4)
 //!   • handler dispatch (pure functions)
-//!   • unified error model (protocol.rs)
-//!   • logging (JSON/ANSI-safe)
+//!   • state transitions (router-owned, handlers are pure)
+//!   • unified error model
+//!   • logging
+//!
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -65,9 +66,9 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
     async fn route_inbound(&self, raw_json: &str) -> Result<String> {
         log_rx(raw_json);
 
-        // ------------------------------------------------------
-        // 1. Decode + classify
-        // ------------------------------------------------------
+        // ============================================================
+        // 1. Decode JSON → (metadata, TGPMessage)
+        // ============================================================
         let (metadata, message) = match classify_message(raw_json) {
             Ok(v) => v,
             Err(e) => {
@@ -78,9 +79,9 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
             }
         };
 
-        // ------------------------------------------------------
+        // ============================================================
         // 2. Replay protection
-        // ------------------------------------------------------
+        // ============================================================
         if !self.replay.check_or_insert(&metadata.msg_id) {
             let err = make_protocol_error(
                 metadata.correlation_id.clone(),
@@ -88,125 +89,127 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 format!("Duplicate message ID: {}", metadata.msg_id),
             );
             log_err(&err);
-
-            let encoded = encode_message(&TGPMessage::Error(err))
-                .map_err(|e| anyhow!("encode error: {}", e))?;
-
-            return Ok(encoded);
+            return Ok(encode_message(&TGPMessage::Error(err))?);
         }
 
-        // ------------------------------------------------------
-        // 3. Structural validation
-        // ------------------------------------------------------
+        // ============================================================
+        // 3. Structural TGP validation (TGP-00 §3)
+        // ============================================================
         match validate_and_classify_message(&metadata, &message) {
             TGPValidationResult::Reject(err) => {
                 log_err(&err);
-
-                let encoded = encode_message(&TGPMessage::Error(err))
-                    .map_err(|e| anyhow!("encode error: {}", e))?;
-
-                return Ok(encoded);
+                return Ok(encode_message(&TGPMessage::Error(err))?);
             }
             TGPValidationResult::Accept => { /* OK */ }
         }
 
-        // ------------------------------------------------------
-        // 4. Session lookup rules (TGP-00 §4)
-        // ------------------------------------------------------
-        let session = match &message {
-            // Query → create + persist new session
+        // ============================================================
+        // 4. SESSION LOOKUP (TGP-00 §4)
+        // ============================================================
+
+        // ------------ Query → creates a session ------------
+        let mut session = match &message {
             TGPMessage::Query(_) => {
-    // Create a new session struct
-    let s = self.sessions.create_session(metadata.msg_id.clone()).await?;
+                let mut s = self.sessions.create_session(metadata.msg_id.clone()).await?;
 
-    // Persist it (update acts as insert for now)
-    self.sessions.update_session(&s).await?;
+                // Bind the query_id to the session
+                s.query_id = Some(metadata.msg_id.clone());
 
-    log_session_created(&s);
-    s
-}
+                self.sessions.update_session(&s).await?;
+                log_session_created(&s);
+                s
+            }
 
-            // Offer → must reference an existing session
+            // ------------ Offer → must reference existing Query ------------
             TGPMessage::Offer(o) => {
-                self.sessions
+                // Look up by query_id
+                let mut s = self.sessions
                     .get_session(&o.query_id)
                     .await?
-                    .ok_or_else(|| anyhow!("Unknown session for OFFER: {}", o.query_id))?
+                    .ok_or_else(|| anyhow!("Unknown session for OFFER: {}", o.query_id))?;
+
+                // Bind an offer_id to the session
+                s.offer_id = Some(o.id.clone());
+                self.sessions.update_session(&s).await?;
+
+                s
             }
 
-            // Settle → must reference existing session
+            // ------------ Settle → may reference offer_id or query_id ------------
             TGPMessage::Settle(s) => {
-                self.sessions
-                    .get_session(&s.query_or_offer_id)
-                    .await?
-                    .ok_or_else(|| anyhow!("Unknown session for SETTLE: {}", s.query_or_offer_id))?
+                // First try exact match
+                if let Some(sess) = self.sessions.get_session(&s.query_or_offer_id).await? {
+                    sess
+                } else {
+                    // Otherwise search for a session whose offer_id matches
+                    let all = self.sessions.list_sessions(4096).await?;
+                    let maybe = all.into_iter()
+                        .find(|x| x.offer_id.as_deref() == Some(&s.query_or_offer_id));
+
+                    maybe.ok_or_else(|| {
+                        anyhow!("Unknown session for SETTLE: {}", s.query_or_offer_id)
+                    })?
+                }
             }
 
-            // Error → ephemeral if correlation_id missing
+            // ------------ Error → ephemeral or referenced ------------
             TGPMessage::Error(e) => {
                 if let Some(cid) = &e.correlation_id {
-                    self.sessions.get_session(cid).await?
+                    // Referenced session OR ephemeral
+                    self.sessions
+                        .get_session(cid)
+                        .await?
+                        .unwrap_or_else(|| TGPSession::ephemeral(cid))
                 } else {
-                    None
+                    // Pure ephemeral
+                    TGPSession::ephemeral(&metadata.msg_id)
                 }
-                .unwrap_or_else(|| TGPSession::ephemeral(&metadata.msg_id))
             }
         };
 
-        // ------------------------------------------------------
-        // 5. Dispatch to pure handlers
-        // ------------------------------------------------------
+        // ============================================================
+        // 5. HANDLER DISPATCH (pure functions)
+        // ============================================================
         let response = match &message {
             TGPMessage::Query(q) => {
                 let span = tgp_span(&session.session_id, "QUERY");
-                let _enter = span.enter();
+                let _e = span.enter();
                 handle_inbound_query(&metadata, &session, q.clone()).await?
             }
 
             TGPMessage::Offer(o) => {
                 let span = tgp_span(&session.session_id, "OFFER");
-                let _enter = span.enter();
+                let _e = span.enter();
                 handle_inbound_offer(&metadata, &session, o.clone()).await?
             }
 
             TGPMessage::Settle(s) => {
                 let span = tgp_span(&session.session_id, "SETTLE");
-                let _enter = span.enter();
+                let _e = span.enter();
                 handle_inbound_settle(&metadata, &session, s.clone()).await?
             }
 
             TGPMessage::Error(e) => {
                 let span = tgp_span(&session.session_id, "ERROR");
-                let _enter = span.enter();
+                let _e = span.enter();
                 handle_inbound_error(&metadata, &session, e.clone()).await?
             }
         };
 
-        // ------------------------------------------------------
-        // 6. State transition + persistence (TGP-00 §4)
-        // ------------------------------------------------------
-        let mut session = session;
-
+        // ============================================================
+        // 6. STATE TRANSITIONS (router-owned)
+        // ============================================================
         match &message {
-            // --------------------------------------------------
-            // Query → QuerySent
-            // --------------------------------------------------
             TGPMessage::Query(_) => {
                 session.transition(TGPState::QuerySent)?;
                 self.sessions.update_session(&session).await?;
             }
 
-            // --------------------------------------------------
-            // Offer → OfferReceived
-            // --------------------------------------------------
             TGPMessage::Offer(_) => {
                 session.transition(TGPState::OfferReceived)?;
                 self.sessions.update_session(&session).await?;
             }
 
-            // --------------------------------------------------
-            // Settle → Settled or Errored
-            // --------------------------------------------------
             TGPMessage::Settle(s) => {
                 if s.success {
                     session.transition(TGPState::Settled)?;
@@ -216,12 +219,10 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 self.sessions.update_session(&session).await?;
             }
 
-            // --------------------------------------------------
-            // Error → Errored unless ephemeral or terminal
-            // --------------------------------------------------
             TGPMessage::Error(_) => {
+                // ephemeral errors are never persisted
                 if session.is_ephemeral() {
-                    // Ephemeral errors are never persisted
+                    // no-op
                 } else if !session.is_terminal() {
                     session.transition(TGPState::Errored)?;
                     self.sessions.update_session(&session).await?;
@@ -229,13 +230,11 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
             }
         }
 
-        // ------------------------------------------------------
-        // 7. Encode + logging
-        // ------------------------------------------------------
-        let response_json = encode_message(&response)
-            .map_err(|e| anyhow!("encode error: {}", e))?;
-
-        log_tx(&response_json);
-        Ok(response_json)
+        // ============================================================
+        // 7. ENCODE OUTBOUND + LOG
+        // ============================================================
+        let outbound = encode_message(&response)?;
+        log_tx(&outbound);
+        Ok(outbound)
     }
 }

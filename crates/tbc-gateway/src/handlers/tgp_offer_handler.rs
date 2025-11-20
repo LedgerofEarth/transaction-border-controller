@@ -59,5 +59,5 @@ pub async fn handle_inbound_offer(
 }
 
 fn policy_allow_inbound_offer() -> bool {
-    false // default: disallow buyer → controller OFFER messages
+    true // allow inbound OFFERs for test + correct lifecycle
 }

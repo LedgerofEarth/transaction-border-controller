@@ -6,7 +6,7 @@
 
 pub mod protocol;
 pub mod tgp;
-pub mod codec_tx
+pub mod codec_tx;
 
 // pub use gateway::Gateway;
 // pub use types::*;

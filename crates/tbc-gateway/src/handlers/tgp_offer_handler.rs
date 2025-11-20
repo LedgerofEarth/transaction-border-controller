@@ -11,13 +11,10 @@
 
 use anyhow::Result;
 
-use tbc_core::codec_tx::{
-    TGPMetadata,
-    classify_message,
-    encode_message,
-    validate_and_classify_message,
-    ReplayProtector,
-    TGPValidationResult,
+use tbc_core::{
+    protocol::{OfferMessage, TGPMessage, make_protocol_error},
+    codec_tx::TGPMetadata,
+    tgp::state::TGPSession,
 };
 
 use crate::logging::*;

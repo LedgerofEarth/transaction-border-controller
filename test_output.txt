@@ -7,17 +7,33 @@ warning: unused imports: `Deserialize` and `Serialize`
    |
    = note: `#[warn(unused_imports)]` on by default
 
-warning: `tbc-core` (lib) generated 1 warning (run `cargo fix --lib -p tbc-core` to apply 1 suggestion)
-   Compiling tbc-gateway v0.1.0 (/workspaces/transaction-border-controller/crates/tbc-gateway)
-error[E0583]: file not found for module `codec_tx`
-  --> crates/tbc-gateway/src/lib.rs:25:1
-   |
-25 | pub mod codec_tx;      // NEW -- parsing, classification, metadata construction
-   | ^^^^^^^^^^^^^^^^^
-   |
-   = help: to create the module `codec_tx`, create file "crates/tbc-gateway/src/codec_tx.rs" or "crates/tbc-gateway/src/codec_tx/mod.rs"
-   = note: if there is a `mod codec_tx` elsewhere in the crate already, import it with `use crate::...` instead
+warning: unused import: `uuid::Uuid`
+ --> crates/tbc-core/src/codec_tx.rs:7:5
+  |
+7 | use uuid::Uuid;
+  |     ^^^^^^^^^^
 
+warning: `tbc-core` (lib) generated 2 warnings (run `cargo fix --lib -p tbc-core` to apply 2 suggestions)
+   Compiling tbc-gateway v0.1.0 (/workspaces/transaction-border-controller/crates/tbc-gateway)
+error: this file contains an unclosed delimiter
+   --> crates/tbc-gateway/src/router/inbound.rs:185:3
+    |
+ 71 | impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
+    |                                                                           - unclosed delimiter
+...
+106 |         match validate_and_classify_message(&metadata, &message) {
+    |                                                                  - this delimiter might not be properly closed...
+...
+111 |     TGPValidationResult::Accept => {}
+    |                                    -- block is empty, you might have not meant to close it
+112 | }
+    | - ...as it matches this but it has different indentation
+...
+185 | }
+    |  ^
+
+error: could not compile `tbc-gateway` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
 warning: unused variable: `order_id`
   --> crates/coreprover-bridge/src/client/escrow_client.rs:27:9
    |
@@ -56,289 +72,4 @@ warning: fields `provider` and `contract_address` are never read
    |
    = note: `#[warn(dead_code)]` on by default
 
-error[E0432]: unresolved imports `tbc_core::codec_tx`, `tbc_core::tgp::TGPSession`, `tbc_core::tgp::SessionStore`
-  --> crates/tbc-gateway/src/router/inbound.rs:27:5
-   |
-27 |     codec_tx::{
-   |     ^^^^^^^^ could not find `codec_tx` in `tbc_core`
-...
-34 |     tgp::{TGPSession, SessionStore},
-   |           ^^^^^^^^^^  ^^^^^^^^^^^^ no `SessionStore` in `tgp`
-   |           |
-   |           no `TGPSession` in `tgp`
-   |
-   = help: consider importing this struct instead:
-           tbc_core::tgp::state::TGPSession
-   = help: consider importing this trait instead:
-           tbc_core::tgp::state::SessionStore
-
-error[E0432]: unresolved import `tbc_core::codec_tx`
-  --> crates/tbc-gateway/src/handlers/tgp_query_handler.rs:12:5
-   |
-12 |     codec_tx::TGPMetadata,
-   |     ^^^^^^^^ could not find `codec_tx` in `tbc_core`
-
-error[E0432]: unresolved import `tbc_core::codec_tx`
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:14:15
-   |
-14 | use tbc_core::codec_tx::{
-   |               ^^^^^^^^ could not find `codec_tx` in `tbc_core`
-
-error[E0432]: unresolved imports `tbc_core::protocol::codec_tx`, `tbc_core::tgp::TGPMetadata`
-  --> crates/tbc-gateway/src/handlers/tgp_settle_handler.rs:14:16
-   |
-14 |     protocol::{codec_tx::SettleMessage, TGPMessage, make_protocol_error},
-   |                ^^^^^^^^ could not find `codec_tx` in `protocol`
-15 |     tgp::{
-16 |         TGPMetadata,
-   |         ^^^^^^^^^^^ no `TGPMetadata` in `tgp`
-
-error[E0432]: unresolved import `tbc_core::codec_tx`
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:15:15
-   |
-15 | use tbc_core::codec_tx::{
-   |               ^^^^^^^^ could not find `codec_tx` in `tbc_core`
-
-error[E0432]: unresolved import `crate::logging::log_info`
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:26:44
-   |
-26 | use crate::logging::{log_handler, log_err, log_info};
-   |                                            ^^^^^^^^ no `log_info` in `logging`
-   |
-   = note: this could be because a macro annotated with `#[macro_export]` will be exported at the root of the crate instead of the module where it is defined
-help: a macro with this name exists at the root of the crate
-   |
-26 - use crate::logging::{log_handler, log_err, log_info};
-26 + use crate::{log_info, logging::{log_handler, log_err}};
-   |
-
 warning: `coreprover-bridge` (lib) generated 5 warnings
-   Compiling coreprover-service v0.1.0 (/workspaces/transaction-border-controller/crates/coreprover-service)
-error[E0433]: failed to resolve: use of unresolved module or unlinked crate `codec_tx`
-   --> crates/tbc-gateway/src/router/inbound.rs:101:13
-    |
-101 |             codec_tx::TGPValidationResult::Reject(err) => {
-    |             ^^^^^^^^ use of unresolved module or unlinked crate `codec_tx`
-    |
-    = help: if you wanted to use a crate named `codec_tx`, use `cargo add codec_tx` to add it to your `Cargo.toml`
-
-error[E0433]: failed to resolve: use of unresolved module or unlinked crate `codec_tx`
-   --> crates/tbc-gateway/src/router/inbound.rs:105:13
-    |
-105 |             codec_tx::TGPValidationResult::Accept => {}
-    |             ^^^^^^^^ use of unresolved module or unlinked crate `codec_tx`
-    |
-    = help: if you wanted to use a crate named `codec_tx`, use `cargo add codec_tx` to add it to your `Cargo.toml`
-
-error[E0412]: cannot find type `OfferMessage` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:29:8
-   |
-29 |     o: OfferMessage,
-   |        ^^^^^^^^^^^^ not found in this scope
-   |
-help: consider importing one of these structs
-   |
-12 + use tbc_core::protocol::OfferMessage;
-   |
-12 + use tbc_core::tgp::messages::OfferMessage;
-   |
-
-error[E0412]: cannot find type `TGPMessage` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:30:13
-   |
-30 | ) -> Result<TGPMessage> {
-   |             ^^^^^^^^^^ not found in this scope
-   |
-help: consider importing one of these enums
-   |
-12 + use tbc_core::protocol::TGPMessage;
-   |
-12 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0425]: cannot find function `make_protocol_error` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:38:19
-   |
-38 |         let err = make_protocol_error(
-   |                   ^^^^^^^^^^^^^^^^^^^ not found in this scope
-   |
-help: consider importing this function
-   |
-12 + use tbc_core::protocol::make_protocol_error;
-   |
-
-error[E0433]: failed to resolve: use of undeclared type `TGPMessage`
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:43:19
-   |
-43 |         return Ok(TGPMessage::Error(err));
-   |                   ^^^^^^^^^^ use of undeclared type `TGPMessage`
-   |
-help: consider importing one of these enums
-   |
-12 + use tbc_core::protocol::TGPMessage;
-   |
-12 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0425]: cannot find function `make_protocol_error` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:50:19
-   |
-50 |         let err = make_protocol_error(
-   |                   ^^^^^^^^^^^^^^^^^^^ not found in this scope
-   |
-help: consider importing this function
-   |
-12 + use tbc_core::protocol::make_protocol_error;
-   |
-
-error[E0433]: failed to resolve: use of undeclared type `TGPMessage`
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:55:19
-   |
-55 |         return Ok(TGPMessage::Error(err));
-   |                   ^^^^^^^^^^ use of undeclared type `TGPMessage`
-   |
-help: consider importing one of these enums
-   |
-12 + use tbc_core::protocol::TGPMessage;
-   |
-12 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0433]: failed to resolve: use of undeclared type `TGPMessage`
-  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:61:8
-   |
-61 |     Ok(TGPMessage::Offer(o))
-   |        ^^^^^^^^^^ use of undeclared type `TGPMessage`
-   |
-help: consider importing one of these enums
-   |
-12 + use tbc_core::protocol::TGPMessage;
-   |
-12 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0412]: cannot find type `ErrorMessage` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:32:8
-   |
-32 |     e: ErrorMessage,
-   |        ^^^^^^^^^^^^ not found in this scope
-   |
-help: consider importing one of these structs
-   |
-13 + use tbc_core::protocol::ErrorMessage;
-   |
-13 + use tbc_core::tgp::messages::ErrorMessage;
-   |
-
-error[E0412]: cannot find type `TGPMessage` in this scope
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:33:13
-   |
-33 | ) -> Result<TGPMessage>
-   |             ^^^^^^^^^^ not found in this scope
-   |
-help: consider importing one of these enums
-   |
-13 + use tbc_core::protocol::TGPMessage;
-   |
-13 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0433]: failed to resolve: use of undeclared type `TGPMessage`
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:51:19
-   |
-51 |         return Ok(TGPMessage::Error(e));
-   |                   ^^^^^^^^^^ use of undeclared type `TGPMessage`
-   |
-help: consider importing one of these enums
-   |
-13 + use tbc_core::protocol::TGPMessage;
-   |
-13 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-error[E0433]: failed to resolve: use of undeclared type `TGPMessage`
-  --> crates/tbc-gateway/src/handlers/tgp_error_handler.rs:85:8
-   |
-85 |     Ok(TGPMessage::Error(e))
-   |        ^^^^^^^^^^ use of undeclared type `TGPMessage`
-   |
-help: consider importing one of these enums
-   |
-13 + use tbc_core::protocol::TGPMessage;
-   |
-13 + use tbc_core::tgp::messages::TGPMessage;
-   |
-
-warning: unused import: `types::SettleSource`
-  --> crates/tbc-gateway/src/handlers/tgp_settle_handler.rs:18:9
-   |
-18 |         types::SettleSource,
-   |         ^^^^^^^^^^^^^^^^^^^
-   |
-   = note: `#[warn(unused_imports)]` on by default
-
-warning: unused import: `log_err`
-  --> crates/tbc-gateway/src/handlers/tgp_settle_handler.rs:22:35
-   |
-22 | use crate::logging::{log_handler, log_err};
-   |                                   ^^^^^^^
-
-error[E0433]: failed to resolve: use of unresolved module or unlinked crate `codec_tx`
-  --> crates/tbc-gateway/src/router/inbound.rs:78:27
-   |
-78 |                 let err = codec_tx::make_protocol_error(None, "INVALID_JSON", e);
-   |                           ^^^^^^^^ use of unresolved module or unlinked crate `codec_tx`
-   |
-   = help: if you wanted to use a crate named `codec_tx`, use `cargo add codec_tx` to add it to your `Cargo.toml`
-
-error[E0433]: failed to resolve: use of unresolved module or unlinked crate `codec_tx`
-  --> crates/tbc-gateway/src/router/inbound.rs:88:23
-   |
-88 |             let err = codec_tx::make_protocol_error(
-   |                       ^^^^^^^^ use of unresolved module or unlinked crate `codec_tx`
-   |
-   = help: if you wanted to use a crate named `codec_tx`, use `cargo add codec_tx` to add it to your `Cargo.toml`
-
-Some errors have detailed explanations: E0412, E0425, E0432, E0433, E0583.
-For more information about an error, try `rustc --explain E0412`.
-warning: `tbc-gateway` (lib test) generated 2 warnings
-error: could not compile `tbc-gateway` (lib test) due to 22 previous errors; 2 warnings emitted
-warning: build failed, waiting for other jobs to finish...
-warning: unused import: `std::fmt`
- --> crates/coreprover-service/src/engine.rs:7:5
-  |
-7 | use std::fmt;
-  |     ^^^^^^^^
-  |
-  = note: `#[warn(unused_imports)]` on by default
-
-warning: use of deprecated associated function `chrono::NaiveDateTime::from_timestamp_opt`: use `DateTime::from_timestamp` instead
-   --> crates/coreprover-service/src/engine.rs:105:37
-    |
-105 |     let dt = chrono::NaiveDateTime::from_timestamp_opt(unix as i64, 0)
-    |                                     ^^^^^^^^^^^^^^^^^^
-    |
-    = note: `#[warn(deprecated)]` on by default
-
-warning: use of deprecated associated function `chrono::NaiveDateTime::from_timestamp_opt`: use `DateTime::from_timestamp` instead
-   --> crates/coreprover-service/src/engine.rs:106:43
-    |
-106 |         .unwrap_or(chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap());
-    |                                           ^^^^^^^^^^^^^^^^^^
-
-warning: use of deprecated associated function `chrono::DateTime::<Tz>::from_utc`: Use TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset instead
-   --> crates/coreprover-service/src/engine.rs:107:38
-    |
-107 |     chrono::DateTime::<chrono::Utc>::from_utc(dt, chrono::Utc).to_rfc3339()
-    |                                      ^^^^^^^^
-
-warning: value assigned to `is_late` is never read
-   --> crates/coreprover-service/src/engine.rs:195:17
-    |
-195 |         let mut is_late = false;
-    |                 ^^^^^^^
-    |
-    = help: maybe it is overwritten before being read?
-    = note: `#[warn(unused_assignments)]` on by default
-
-warning: `coreprover-service` (lib) generated 5 warnings (run `cargo fix --lib -p coreprover-service` to apply 1 suggestion)

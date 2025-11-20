@@ -1,31 +1,18 @@
-//! ERROR Handler (Pure Function with Rich Telemetry)
-//! ------------------------------------------------------------
-//! Receives:  ERROR
-//! Returns:   ERROR (echo)
-//!
-//! Controller behavior for inbound ERRORs:
-//!   • defensively validate ERROR structure
-//!   • log error details, correlation chain, and session info
-//!   • echo unchanged (TGP-00 forbids ERROR→ERROR synthesis)
-//!
-//! NOTE: This handler performs NO session mutation.
-
 use anyhow::Result;
 
-use tbc_core::codec_tx::{
-    TGPMetadata,
-    classify_message,
-    encode_message,
-    validate_and_classify_message,
-    ReplayProtector,
-    TGPValidationResult,
+use tbc_core::{
+    codec_tx::TGPMetadata,
+    protocol::{ErrorMessage, TGPMessage},
+    tgp::state::TGPSession,
 };
 
-use tbc_core::tgp::state::TGPSession;
+// Macros exported at crate root
+use crate::{log_error, log_info};
 
-use crate::logging::{log_handler, log_err, log_info};
+// Logging functions
+use crate::logging::{log_handler, log_err};
 
-/// Handle inbound ERROR message (echo + logging)
+/// Handle inbound ERROR message → echo + logging
 pub async fn handle_inbound_error(
     _meta: &TGPMetadata,
     session: &TGPSession,
@@ -35,28 +22,29 @@ pub async fn handle_inbound_error(
     log_handler("ERROR");
 
     // ------------------------------------------------------
-    // 1. Defensive structural validation
+    // 1. Structural validation (defensive)
     // ------------------------------------------------------
     if let Err(v) = e.validate() {
-        log_info!(
+        log_error!(
+            target: "tgp.error",
             {
                 "id": e.id.clone(),
                 "validation_error": v,
-                "correlation": e.correlation_id.clone()
+                "correlation": e.correlation_id
             },
             "Inbound ERROR failed structural validation"
         );
 
-        // TGP-00: MUST still return the malformed ERROR unchanged.
         return Ok(TGPMessage::Error(e));
     }
 
     // ------------------------------------------------------
-    // 2. Log primary ERROR info
+    // 2. Log ERROR metadata
     // ------------------------------------------------------
     log_err(&e);
 
     log_info!(
+        target: "tgp.error",
         {
             "id": e.id.clone(),
             "code": e.code.clone(),
@@ -66,13 +54,14 @@ pub async fn handle_inbound_error(
     );
 
     // ------------------------------------------------------
-    // 3. Correlation chain logging
+    // 3. Optional correlation chain linking
     // ------------------------------------------------------
     if let Some(cid) = &e.correlation_id {
         log_info!(
+            target: "tgp.error",
             {
                 "id": e.id.clone(),
-                "correlation": cid.clone(),
+                "correlation": cid,
                 "session_id": session.session_id.clone()
             },
             "Correlation chain linked"
@@ -80,7 +69,7 @@ pub async fn handle_inbound_error(
     }
 
     // ------------------------------------------------------
-    // 4. Echo ERROR back (SIP-style)
+    // 4. Echo ERROR back
     // ------------------------------------------------------
     Ok(TGPMessage::Error(e))
 }

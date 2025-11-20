@@ -11,17 +11,18 @@
 use anyhow::Result;
 
 use tbc_core::{
-    protocol::{codec_tx::SettleMessage, TGPMessage, make_protocol_error},
-    tgp::{
-        TGPMetadata,
-        state::TGPSession,
-        types::SettleSource,
-    },
+    protocol::{SettleMessage, TGPMessage, make_protocol_error},
+    codec_tx::TGPMetadata,
 };
 
-use crate::logging::{log_handler, log_err};
-use crate::log_info; // exported at crate root via #[macro_export]
+use tbc_core::tgp::state::TGPSession;
+use tbc_core::tgp::types::SettleSource;
 
+// macros exported at crate root
+use crate::log_info;
+
+// functions that live inside logging.rs
+use crate::logging::{log_handler, log_err};
 
 /// Handle inbound SETTLE → returns SETTLE or ERROR
 pub async fn handle_inbound_settle(

@@ -22,6 +22,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use std::sync::Arc;
 
 use tbc_core::{
     codec_tx::{
@@ -29,9 +30,11 @@ use tbc_core::{
         encode_message,
         validate_and_classify_message,
         ReplayProtector,
+        InMemoryReplayCache,
+        TGPValidationResult,
     },
-    protocol::TGPMessage,
-    tgp::{TGPSession, SessionStore},
+    protocol::{TGPMessage, make_protocol_error},
+    tgp::state::{TGPSession, SessionStore},
 };
 
 use crate::handlers::{
@@ -52,14 +55,14 @@ pub trait TGPInboundRouter {
 /// Default Router Implementation
 pub struct InboundRouter<S: SessionStore + Send + Sync> {
     pub sessions: S,
-    pub replay: ReplayProtector,
+    pub replay: Arc<dyn ReplayProtector + Send + Sync>,
 }
 
 impl<S: SessionStore + Send + Sync> InboundRouter<S> {
     pub fn new(sessions: S) -> Self {
         Self {
             sessions,
-            replay: ReplayProtector::default(),
+            replay: Arc::new(InMemoryReplayCache::default()),
         }
     }
 }
@@ -75,9 +78,10 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         let (metadata, message) = match classify_message(raw_json) {
             Ok(v) => v,
             Err(e) => {
-                let err = codec_tx::make_protocol_error(None, "INVALID_JSON", e);
+                let err = make_protocol_error(None, "INVALID_JSON", e);
                 log_err(&err);
-                return Ok(encode_message(&TGPMessage::Error(err))?);
+                return encode_message(&TGPMessage::Error(err))
+    .map_err(|e| anyhow!("encode error: {}", e));
             }
         };
 
@@ -85,25 +89,27 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // 2. Replay protection
         // ------------------------------------------------------
         if !self.replay.check_or_insert(&metadata.msg_id) {
-            let err = codec_tx::make_protocol_error(
+            let err = make_protocol_error(
                 metadata.correlation_id.clone(),
                 "REPLAY_DETECTED",
                 format!("Duplicate message ID: {}", metadata.msg_id),
             );
             log_err(&err);
-            return Ok(encode_message(&TGPMessage::Error(err))?);
-        }
+            let encoded = encode_message(&TGPMessage::Error(err))
+    .map_err(|e| anyhow!("encode error: {}", e))?;
+
+    return Ok(encoded);
+
 
         // ------------------------------------------------------
-        // 3. Message validation (pure structural)
-        // ------------------------------------------------------
+        // 3. Message validation (pure structural)       // ------------------------------------------------------
         match validate_and_classify_message(&metadata, &message) {
-            codec_tx::TGPValidationResult::Reject(err) => {
-                log_err(&err);
-                return Ok(encode_message(&TGPMessage::Error(err))?);
-            }
-            codec_tx::TGPValidationResult::Accept => {}
-        }
+    TGPValidationResult::Reject(err) => {
+        log_err(&err);
+        return Ok(encode_message(&TGPMessage::Error(err))?);
+    }
+    TGPValidationResult::Accept => {}
+}
 
         // ------------------------------------------------------
         // 4. Session lookup rules (TGP-00 §4)

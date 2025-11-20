@@ -1,46 +1,37 @@
 //! # TGP Codec + Transport Layer (codec_tx.rs)
 //!
-//! This module corresponds to SIP’s separation of:
-//!   • RFC3261 §7  – *Message Encoding / Decoding*
-//!   • RFC3261 §8  – *Transaction Layer*
-//!
-//! In TGP-00, this file is the *pure transport codec*:
-//!   • Parse JSON into typed TGPMessage
-//!   • Serialize typed TGPMessage to JSON
-//!   • Construct metadata (TGPMetadata)
-//!   • Provide MessageEnvelope<T> for router-level framing
-//!   • Provide replay-window protection (in-memory ring buffer)
-//!
-//! Handlers remain **pure** and take typed structures only.
-//! Router remains controller-side logic.
-//!
-//! No policy logic lives here. No state transitions. No handler mutation.
-//!
-//! This module is intentionally "dumb," just like SIP's parser layer,
-//! ensuring correctness, inspectability, and security by simplicity.
+//! Pure JSON codec + transport metadata for TGP-00.
+//! No policy, no MGMT, no session logic, no chrono, no platform-unsafe deps.
 
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
 use uuid::Uuid;
 
-use crate::tgp::{
-    protocol::TGPMessage,
-    protocol::{ErrorMessage, make_protocol_error},
+use crate::{
+    protocol::{TGPMessage, ErrorMessage, make_protocol_error},
 };
+
+// ================================================================================================
+// Timestamp Helper (WASM-safe, no chrono)
+// ================================================================================================
+
+/// Deterministic, portable millisecond timestamp.
+///
+/// Avoids `chrono` because tbc-core must run in WASM, MCP agents,
+/// gateways, and minimal embedded validators.
+///
+/// Not strictly RFC3339; it's metadata only.
+fn now_millis() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
+}
 
 // ================================================================================================
 // Message Envelope (Controller-side framing)
 // ================================================================================================
 
-/// Controller-side envelope similar to SIP’s transaction-layer transport wrapper.
-///
-/// Encapsulates:
-///   • session_id (if established)
-///   • correlation_id
-///   • rx timestamp (ms)
-///   • body (typed TGPMessage)
-///
-/// This is what the router operates on before dispatch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageEnvelope<T> {
     pub session_id: Option<String>,
@@ -54,7 +45,7 @@ impl<T> MessageEnvelope<T> {
         Self {
             session_id,
             correlation_id,
-            received_at: Utc::now().timestamp_millis() as u64,
+            received_at: now_millis(),
             body,
         }
     }
@@ -64,7 +55,6 @@ impl<T> MessageEnvelope<T> {
 // Metadata (transport header reflection)
 // ================================================================================================
 
-/// The router inspects this before handler dispatch.
 #[derive(Debug, Clone)]
 pub struct TGPMetadata {
     pub msg_type: TGPMessageType,
@@ -83,7 +73,6 @@ pub enum TGPMessageType {
 }
 
 impl TGPMetadata {
-    /// SIP-style classification pass: parse → reflect info.
     pub fn from_message(raw_json: String, message: &TGPMessage) -> Self {
         let msg_type = match message {
             TGPMessage::Query(_)  => TGPMessageType::Query,
@@ -113,42 +102,31 @@ impl TGPMetadata {
 // JSON Parsing / Encoding Layer (pure SIP-style codec)
 // ================================================================================================
 
-/// JSON → typed TGPMessage (pure function)
 pub fn parse_message(json: &str) -> Result<TGPMessage, String> {
     serde_json::from_str::<TGPMessage>(json)
         .map_err(|e| format!("Failed to parse TGPMessage: {}", e))
 }
 
-/// Parse + metadata classification
 pub fn classify_message(json: &str) -> Result<(TGPMetadata, TGPMessage), String> {
     let msg = parse_message(json)?;
     let metadata = TGPMetadata::from_message(json.to_string(), &msg);
     Ok((metadata, msg))
 }
 
-/// typed TGPMessage → JSON
 pub fn encode_message(message: &TGPMessage) -> Result<String, String> {
     serde_json::to_string(message)
         .map_err(|e| format!("Failed to encode TGPMessage: {}", e))
 }
 
 // ================================================================================================
-// Replay Protection (Option B: 8192 sliding window)
+// Replay Protection
 // ================================================================================================
 
-/// Generic trait to allow redis, dynamo, in-mem, or sharded cache.
 pub trait ReplayProtector: Send + Sync {
-    /// Returns true if this msg_id is fresh.
-    /// Returns false if replayed.
     fn check_or_insert(&self, msg_id: &str) -> bool;
 }
 
-/// In-memory ring buffer (lock-free under RwLock)
-///
-/// Memory use:
-///   • 8192 entries * 48 bytes ≈ 0.39 MB
-/// Fast. Perfect for a single TBC instance. Replaceable.
-use std::sync::{RwLock};
+use std::sync::RwLock;
 
 pub struct InMemoryReplayCache {
     window: usize,
@@ -168,7 +146,7 @@ impl InMemoryReplayCache {
 
 impl Default for InMemoryReplayCache {
     fn default() -> Self {
-        Self::new(8192)   // Option B -- fixed replay window
+        Self::new(8192)
     }
 }
 
@@ -177,12 +155,10 @@ impl ReplayProtector for InMemoryReplayCache {
         let mut idx = self.index.write().unwrap();
         let mut buffer = self.buffer.write().unwrap();
 
-        // Check for presence
         if buffer.contains(&msg_id.to_string()) {
-            return false; // replay
+            return false;
         }
 
-        // Insert in ring
         buffer[*idx] = msg_id.to_string();
         *idx = (*idx + 1) % self.window;
 
@@ -191,7 +167,7 @@ impl ReplayProtector for InMemoryReplayCache {
 }
 
 // ================================================================================================
-// Error Builders -- spec compliant
+// Error Builders
 // ================================================================================================
 
 pub fn error_from_validation(
@@ -210,12 +186,9 @@ pub fn error_from_exception(msg: impl Into<String>) -> ErrorMessage {
 }
 
 // ================================================================================================
-// Transport Validation Entry Point
+// Validation
 // ================================================================================================
 
-/// SIP-style "initial validity" check (message-structure only)
-///
-/// Handlers are pure. Router applies policy. Codec is structure-only.
 #[derive(Debug)]
 pub enum TGPValidationResult {
     Accept,
@@ -227,14 +200,9 @@ pub fn validate_and_classify_message(
     message: &TGPMessage,
 ) -> TGPValidationResult {
 
-    // 1. Built-in structural validation (Message.validate())
     if let Err(e) = message.validate() {
         return TGPValidationResult::Reject(error_from_validation(metadata, e));
     }
-
-    // 2. No policy here -- router does it.
-    // 3. No settlement logic here -- handlers do it.
-    // 4. No state logic here -- state.rs does it.
 
     TGPValidationResult::Accept
 }

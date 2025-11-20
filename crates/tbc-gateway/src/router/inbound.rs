@@ -89,7 +89,9 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
                 format!("Duplicate message ID: {}", metadata.msg_id),
             );
             log_err(&err);
-            return Ok(encode_message(&TGPMessage::Error(err))?);
+            let encoded = encode_message(&TGPMessage::Error(err))
+    .map_err(|e| anyhow!("encode error: {}", e))?;
+return Ok(encoded);
         }
 
         // ============================================================
@@ -98,7 +100,9 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         match validate_and_classify_message(&metadata, &message) {
             TGPValidationResult::Reject(err) => {
                 log_err(&err);
-                return Ok(encode_message(&TGPMessage::Error(err))?);
+                let encoded = encode_message(&TGPMessage::Error(err))
+    .map_err(|e| anyhow!("encode error: {}", e))?;
+return Ok(encoded);
             }
             TGPValidationResult::Accept => { /* OK */ }
         }
@@ -233,7 +237,8 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // ============================================================
         // 7. ENCODE OUTBOUND + LOG
         // ============================================================
-        let outbound = encode_message(&response)?;
+        let outbound = encode_message(&response)
+    .map_err(|e| anyhow!("encode error: {}", e))?;
         log_tx(&outbound);
         Ok(outbound)
     }

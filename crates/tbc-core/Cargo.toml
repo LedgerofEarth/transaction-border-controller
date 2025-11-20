@@ -16,5 +16,10 @@ thiserror = "1.0"
 log = "0.4"
 uuid = { version = "1.8", features = ["v4"] }
 
+[[bench]]
+name = "replay_bench"
+harness = false
+
 [dev-dependencies]
 proptest = { workspace = true }
+criterion = "0.5"

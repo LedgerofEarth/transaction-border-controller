@@ -1,0 +1,26 @@
+warning: unused imports: `Deserialize` and `Serialize`
+  --> crates/tbc-core/src/tgp/validation.rs:30:13
+   |
+30 | use serde::{Serialize, Deserialize};
+   |             ^^^^^^^^^  ^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `uuid::Uuid`
+ --> crates/tbc-core/src/codec_tx.rs:7:5
+  |
+7 | use uuid::Uuid;
+  |     ^^^^^^^^^^
+
+warning: `tbc-core` (lib) generated 2 warnings (run `cargo fix --lib -p tbc-core` to apply 2 suggestions)
+   Compiling tbc-core v0.1.0 (/workspaces/transaction-border-controller/crates/tbc-core)
+error[E0560]: struct `tbc_core::protocol::OfferMessage` has no field named `query_or_offer_id`
+  --> crates/tbc-core/benches/tgp_throughput_harness.rs:45:9
+   |
+45 |         query_or_offer_id: "q-123".into(),
+   |         ^^^^^^^^^^^^^^^^^ `tbc_core::protocol::OfferMessage` does not have this field
+   |
+   = note: available fields are: `query_id`
+
+For more information about this error, try `rustc --explain E0560`.
+error: could not compile `tbc-core` (bench "tgp_throughput_harness") due to 1 previous error

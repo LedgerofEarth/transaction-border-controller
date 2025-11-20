@@ -1,5 +1,5 @@
 use criterion::{criterion_group, criterion_main, Criterion, black_box};
-use tbc_core::tgp::codec_tx::InMemoryReplayCache;
+use tbc_core::codec_tx::{InMemoryReplayCache, ReplayProtector};
 
 fn bench_replay_insert(c: &mut Criterion) {
     let cache = InMemoryReplayCache::new(8192);

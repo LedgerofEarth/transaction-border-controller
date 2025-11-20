@@ -39,8 +39,10 @@ use serde::{Serialize, Deserialize};
 /// never be empty.
 ///
 /// Example:
-/// ```rust
-/// validate_non_empty("q-123", "id")?;
+/// ```
+/// use tbc_core::tgp::validation::validate_non_empty;
+///
+/// validate_non_empty("q-123", "id").unwrap();
 /// ```
 pub fn validate_non_empty(value: &str, field_name: &str) -> Result<(), String> {
     if value.trim().is_empty() {
@@ -55,8 +57,10 @@ pub fn validate_non_empty(value: &str, field_name: &str) -> Result<(), String> {
 /// greater than zero.
 ///
 /// Example:
-/// ```rust
-/// validate_positive_amount(1000, "amount")?;
+/// ```
+/// use tbc_core::tgp::validation::validate_positive_amount;
+///
+/// validate_positive_amount(1000, "amount").unwrap();
 /// ```
 pub fn validate_positive_amount(amount: u64, field_name: &str) -> Result<(), String> {
     if amount == 0 {
@@ -172,8 +176,10 @@ pub fn validate_id_format(id: &str, expected_prefix: Option<&str>) -> Result<(),
 ///     • Optional prefix-phase check
 ///
 /// Example:
-/// ```rust
-/// validate_correlation_id("q-abc", Some("QUERY"))?;
+/// ```
+/// use tbc_core::tgp::validation::validate_correlation_id;
+///
+/// validate_correlation_id("q-abc", Some("QUERY")).unwrap();
 /// ```
 pub fn validate_correlation_id(
     correlation_id: &str,

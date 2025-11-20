@@ -86,29 +86,38 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         };
 
         // ------------------------------------------------------
-        // 2. Replay protection
-        // ------------------------------------------------------
-        if !self.replay.check_or_insert(&metadata.msg_id) {
-            let err = make_protocol_error(
-                metadata.correlation_id.clone(),
-                "REPLAY_DETECTED",
-                format!("Duplicate message ID: {}", metadata.msg_id),
-            );
-            log_err(&err);
-            let encoded = encode_message(&TGPMessage::Error(err))
-    .map_err(|e| anyhow!("encode error: {}", e))?;
+// 2. Replay protection
+// ------------------------------------------------------
+if !self.replay.check_or_insert(&metadata.msg_id) {
+    let err = make_protocol_error(
+        metadata.correlation_id.clone(),
+        "REPLAY_DETECTED",
+        format!("Duplicate message ID: {}", metadata.msg_id),
+    );
+    log_err(&err);
+
+    let encoded = encode_message(&TGPMessage::Error(err))
+        .map_err(|e| anyhow!("encode error: {}", e))?;
 
     return Ok(encoded);
-
+} 
 
         // ------------------------------------------------------
-        // 3. Message validation (pure structural)       // ------------------------------------------------------
-        match validate_and_classify_message(&metadata, &message) {
+// 3. Structural message validation
+// ------------------------------------------------------
+match validate_and_classify_message(&metadata, &message) {
     TGPValidationResult::Reject(err) => {
         log_err(&err);
-        return Ok(encode_message(&TGPMessage::Error(err))?);
+
+        let encoded = encode_message(&TGPMessage::Error(err))
+            .map_err(|e| anyhow!("encode error: {}", e))?;
+
+        return Ok(encoded);
     }
-    TGPValidationResult::Accept => {}
+
+    TGPValidationResult::Accept => {
+        // Validation OK
+    }
 }
 
         // ------------------------------------------------------
@@ -178,7 +187,8 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
         // ------------------------------------------------------
         // 6. Encode + logging
         // ------------------------------------------------------
-        let response_json = encode_message(&response)?;
+        let response_json = encode_message(&response)
+    .map_err(|e| anyhow!("encode error: {}", e))?;
         log_tx(&response_json);
         Ok(response_json)
     }

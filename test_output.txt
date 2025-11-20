@@ -14,26 +14,36 @@ warning: unused import: `uuid::Uuid`
   |     ^^^^^^^^^^
 
 warning: `tbc-core` (lib) generated 2 warnings (run `cargo fix --lib -p tbc-core` to apply 2 suggestions)
-   Compiling tbc-gateway v0.1.0 (/workspaces/transaction-border-controller/crates/tbc-gateway)
-error: this file contains an unclosed delimiter
-   --> crates/tbc-gateway/src/router/inbound.rs:185:3
-    |
- 71 | impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
-    |                                                                           - unclosed delimiter
-...
-106 |         match validate_and_classify_message(&metadata, &message) {
-    |                                                                  - this delimiter might not be properly closed...
-...
-111 |     TGPValidationResult::Accept => {}
-    |                                    -- block is empty, you might have not meant to close it
-112 | }
-    | - ...as it matches this but it has different indentation
-...
-185 | }
-    |  ^
+warning: unused import: `tgp::state::TGPSession`
+  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:17:5
+   |
+17 |     tgp::state::TGPSession,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
 
-error: could not compile `tbc-gateway` (lib test) due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
+warning: unused import: `tbc_core::tgp::types::SettleSource`
+  --> crates/tbc-gateway/src/handlers/tgp_settle_handler.rs:19:5
+   |
+19 | use tbc_core::tgp::types::SettleSource;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `log_err`
+  --> crates/tbc-gateway/src/handlers/tgp_settle_handler.rs:25:35
+   |
+25 | use crate::logging::{log_handler, log_err};
+   |                                   ^^^^^^^
+
+warning: unused variable: `meta`
+  --> crates/tbc-gateway/src/handlers/tgp_offer_handler.rs:24:5
+   |
+24 |     meta: &TGPMetadata,
+   |     ^^^^ help: if this is intentional, prefix it with an underscore: `_meta`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `tbc-gateway` (lib test) generated 4 warnings (run `cargo fix --lib -p tbc-gateway --tests` to apply 3 suggestions)
+warning: `tbc-core` (lib test) generated 2 warnings (2 duplicates)
 warning: unused variable: `order_id`
   --> crates/coreprover-bridge/src/client/escrow_client.rs:27:9
    |
@@ -72,4 +82,117 @@ warning: fields `provider` and `contract_address` are never read
    |
    = note: `#[warn(dead_code)]` on by default
 
-warning: `coreprover-bridge` (lib) generated 5 warnings
+warning: `coreprover-bridge` (lib) generated 5 warnings (3 duplicates)
+   Compiling coreprover-sdk v0.1.0 (/workspaces/transaction-border-controller/crates/coreprover-sdk)
+warning: unused variable: `rpc_url`
+  --> crates/coreprover-sdk/src/client.rs:11:16
+   |
+11 |     pub fn new(rpc_url: &str) -> Result<Self> {
+   |                ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_rpc_url`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: `coreprover-bridge` (lib test) generated 5 warnings (2 duplicates)
+   Compiling coreprover-service v0.1.0 (/workspaces/transaction-border-controller/crates/coreprover-service)
+warning: unused import: `std::fmt`
+ --> crates/coreprover-service/src/engine.rs:7:5
+  |
+7 | use std::fmt;
+  |     ^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: `coreprover-sdk` (lib test) generated 1 warning
+warning: use of deprecated associated function `chrono::NaiveDateTime::from_timestamp_opt`: use `DateTime::from_timestamp` instead
+   --> crates/coreprover-service/src/engine.rs:105:37
+    |
+105 |     let dt = chrono::NaiveDateTime::from_timestamp_opt(unix as i64, 0)
+    |                                     ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated associated function `chrono::NaiveDateTime::from_timestamp_opt`: use `DateTime::from_timestamp` instead
+   --> crates/coreprover-service/src/engine.rs:106:43
+    |
+106 |         .unwrap_or(chrono::NaiveDateTime::from_timestamp_opt(0, 0).unwrap());
+    |                                           ^^^^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `chrono::DateTime::<Tz>::from_utc`: Use TimeZone::from_utc_datetime() or DateTime::from_naive_utc_and_offset instead
+   --> crates/coreprover-service/src/engine.rs:107:38
+    |
+107 |     chrono::DateTime::<chrono::Utc>::from_utc(dt, chrono::Utc).to_rfc3339()
+    |                                      ^^^^^^^^
+
+warning: value assigned to `is_late` is never read
+   --> crates/coreprover-service/src/engine.rs:195:17
+    |
+195 |         let mut is_late = false;
+    |                 ^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: `coreprover-service` (lib test) generated 5 warnings (run `cargo fix --lib -p coreprover-service --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.25s
+warning: the following packages contain code that will be rejected by a future version of Rust: redis v0.24.0, sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 2`
+     Running unittests src/lib.rs (target/debug/deps/coreprover_bridge-ecacc6f82bbe560d)
+
+running 1 test
+test tests::test_version ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/coreprover_sdk-4dff369150eb008d)
+
+running 1 test
+test tests::test_version ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/coreprover_service-dd1c794eebfaf603)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/coreprover_zk-f7417420de306d05)
+
+running 1 test
+test tests::test_version ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/tbc_core-b0ebb4e128dbd917)
+
+running 21 tests
+test tests::test_version ... ok
+test tgp::messages::tests::test_builder_methods ... ok
+test tgp::messages::tests::test_error_message_validation ... ok
+test tgp::messages::tests::test_message_serialization ... ok
+test tgp::messages::tests::test_offer_message_validation ... ok
+test tgp::messages::tests::test_query_message_validation ... ok
+test tgp::messages::tests::test_settle_message_validation ... ok
+test tgp::state::tests::test_ephemeral_session ... ok
+test tgp::state::tests::test_force_error ... ok
+test tgp::state::tests::test_timeout_logic ... ok
+test tgp::state::tests::test_valid_path ... ok
+test tgp::types::tests::test_anomaly_scoring ... ok
+test tgp::types::tests::test_domain_trust_weights ... ok
+test tgp::validation::tests::test_validate_address ... ok
+test tgp::validation::tests::test_validate_correlation_id ... ok
+test tgp::validation::tests::test_validate_id_format ... ok
+test tgp::validation::tests::test_validate_non_empty ... ok
+test tgp::validation::tests::test_validate_positive_amount ... ok
+test tgp::validation::tests::test_validate_rfc3339_format ... ok
+test tgp::validation::tests::test_validate_tx_hash ... ok
+test tgp::validation::tests::test_validate_url_format ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/tbc_gateway-a81d7005ce69b0fe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

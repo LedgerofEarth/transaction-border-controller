@@ -39,8 +39,10 @@ use serde::{Serialize, Deserialize};
 /// never be empty.
 ///
 /// Example:
-/// ```rust
-/// validate_non_empty("q-123", "id")?;
+/// ```
+/// use tbc_core::tgp::validation::validate_non_empty;
+///
+/// validate_non_empty("q-123", "id").unwrap();
 /// ```
 pub fn validate_non_empty(value: &str, field_name: &str) -> Result<(), String> {
     if value.trim().is_empty() {

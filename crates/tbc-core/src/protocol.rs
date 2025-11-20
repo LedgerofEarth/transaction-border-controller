@@ -25,8 +25,6 @@
 //! appears here. This file is deliberately "spec-pure."
 
 use serde::{Deserialize, Serialize};
-use crate::protocol::make_protocol_error;
-use crate::protocol::ErrorMessage;
 use crate::tgp::types::{ZkProfile, EconomicEnvelope, SettleSource};
 use crate::tgp::validation::{
     validate_non_empty,
@@ -328,18 +326,12 @@ use uuid::Uuid;
 ///
 /// # Examples
 ///
-/// ```rust
-/// // Standalone error
-/// let e = make_protocol_error(None,
-///                             "INVALID_JSON",
-///                             "Malformed payload");
+//// ```
+/// use tbc_core::protocol::make_protocol_error;
 ///
-/// // Correlated error
-/// let e = make_protocol_error(
-///         Some("q-123".to_string()),
-///         "UNSUPPORTED_ASSET",
-///         "DOGE not supported");
-/// ```
+/// let e = make_protocol_error(None, "ERR", "something went wrong");
+/// assert_eq!(e.code, "ERR");
+// ```
 pub fn make_protocol_error(
     correlation_id: Option<String>,
     code: impl Into<String>,

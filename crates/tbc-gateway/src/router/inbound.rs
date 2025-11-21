@@ -191,11 +191,13 @@ impl<S: SessionStore + Send + Sync> TGPInboundRouter for InboundRouter<S> {
             }
         }
 
-        // =====================================================================
-        // 7. ENCODE + LOG
-        // =====================================================================
-        let outbound = encode_message(&response)?;
-        log_tx(&outbound);
-        Ok(outbound)
+        // // ============================================================
+// 7. ENCODE OUTBOUND + LOG
+// ============================================================
+let outbound = encode_message(&response)
+    .map_err(|e| anyhow!("encode error: {}", e))?;
+
+log_tx(&outbound);
+Ok(outbound)
     }
 }

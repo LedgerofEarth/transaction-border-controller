@@ -1,323 +1,175 @@
-🌐 Transaction Border Controller (TBC) & Transaction Gateway Protocol (TGP)
+🌐 Transaction Border Controller (TBC)
 
-A Carrier-Grade Economic Control Plane for Autonomous, Agent-Driven Blockchain Transactions
-Created by Ledger of Earth
-Version: 0.7 (Active Development)
+Private, Safe, NATted Payments for Buyers and Merchants
 
-⸻
+The Transaction Border Controller (TBC) is a transaction firewall that lets buyers and merchants transact securely without ever exposing their real wallet addresses, financial history, or operational infrastructure.
 
-📌 Overview
+TBC provides transaction NAT — Network Address Translation — but for blockchain wallets.
 
-Modern blockchain wallets were never designed for autonomous agents, cross-domain compliance, session budgets, or multi-step escrow transactions.
-Applications and AI systems today have no safe way to negotiate or route payments without exposing users to risk.
-
-The Transaction Border Controller (TBC) and the Transaction Gateway Protocol (TGP) form a new Layer-8 economic control plane for secure, policy-governed blockchain transactions.
-
-This system provides:
-	•	Safe agent-driven payments
-	•	Escrow-first settlement flows
-	•	Policy-aware transaction governance
-	•	Session-based spend limits
-	•	Multi-chain routing logic
-	•	Wallet-compatible transaction pipeline
-	•	No key exposure, no custody, no wallet modification
-
-It adapts the proven carrier-grade model of Session Border Controllers (VoIP) into a modern blockchain-native transaction firewall.
+Just like IP NAT hides internal infrastructure behind a carrier-grade gateway, TBC hides buyer and merchant wallets behind a policy-controlled transaction gateway.
 
 ⸻
 
-🧩 What This System Does
+🔒 What “Transaction NAT” Means
 
-Using TGP + TBC, any transaction—human or agent-initiated—follows this pipeline:
+🛒 For Buyers
+	•	Your real wallet address is never exposed to the merchant.
+	•	The extension uses a delegated session key or policy key.
+	•	Merchants never see:
+	•	your main wallet
+	•	your transaction history
+	•	your token holdings
+	•	prior or future activity
 
-Application (x402)
-      ↓
-TGP Client Runtime (browser extension)
-      ↓
-Transaction Border Controller (policy engine)
-      ↓
-Wallet (blind signer)
-      ↓
-Escrow / Payment Profile Contract (settlement state machine)
-      ↓
-Blockchain Network
+Your main wallet stays private — permanently.
 
-This introduces, for the first time:
-	•	Transaction NAT/Firewall behavior
-	•	Escrow sequencing enforced by protocol
-	•	Deterministic transaction construction
-	•	Separation of authorization, policy, signing, and settlement
-	•	Safe autonomous execution for agents
+When a buyer authorizes a purchase:
+	1.	The TGP Client constructs a QUERY.
+	2.	The TBC returns an Economic Envelope.
+	3.	The wallet blindly signs the pre-constructed transaction.
+	4.	The settlement contract receives the funds.
+	5.	The merchant only sees escrow state, not the buyer’s wallet.
 
-Wallets remain unmodified.
-Users maintain full key control.
-Policies live in the TBC.
-Settlement logic lives on-chain.
-Agents remain constrained and safe.
+This is payment NAT for consumers.
 
 ⸻
 
-🚧 Repository Structure
+🏬 For Merchants
 
-/specs
-   TGP-00.md                 # Core signaling protocol
-   TGP-CP-00.md              # Client runtime profile
-   TGP-EX-00.md              # Browser extension runtime
-   TBC-00.md                 # Transaction Border Controller spec
-   TxIP-00.md                # Signaling primitive
-   x402-EXT.md               # Binding to x402 agent protocol
-   appendices/               # Economic envelope, settlement receipts, etc.
-   api/                      # TBC management API
-   deprecated/               # Legacy VGP + early drafts
+Merchants also gain NAT-level protection:
+	•	Their treasury address is never exposed to buyers.
+	•	Every payment flows through the CoreProve settlement contract, not the merchant’s hot wallet.
+	•	Settlement contracts act as isolated escrow endpoints.
 
-/coreprover-contracts        # Settlement contract tests & ABI
-/coreprover-service          # TBC Gateway (Rust)
-/coreprover-sdk              # Client-side SDK (TS/Rust)
-/tgp-extension               # Browser extension implementation
-/docs
-   architecture/             # Architecture, topology, diagrams
-   analysis/                 # Engineering analysis
-   roadmap/                  # Rebuild plans, timelines
+Buyers never know:
+	•	the merchant’s internal wallet structure
+	•	which accounts hold operational funds
+	•	routing between merchant business units
 
+Attack surface is dramatically reduced.
+
+Just like a web server behind NAT:
+	•	the merchant’s wallets cannot be DDoS’d
+	•	cannot be probed
+	•	cannot be target-profiled
+
+All a buyer sees is the merchant’s on-chain payment profile (a contract, not a wallet).
 
 ⸻
 
-🔐 Key Architectural Components
+🧩 Why Businesses Care
 
-1. TGP — Transaction Gateway Protocol
+Merchants today are hesitant to accept crypto because:
 
-Defines QUERY/ACK signaling:
-	•	QUERY requests policy guidance
-	•	ACK returns transaction specifications
-	•	Session-based transaction flow
-	•	Routing mode: direct or relay
-	•	Escrow verbs (commit, accept, fulfill, claim)
+❌ Their wallets get doxxed
 
-⸻
+Once a buyer pays a merchant, the merchant’s entire financial history becomes visible.
 
-2. TBC — Transaction Border Controller
+❌ They must operate hot wallets
 
-Think of this as a “transaction firewall” or “economic SBC.”
+Hot wallets are dangerous and operationally expensive.
 
-Responsibilities:
-	•	Policy evaluation
-	•	Jurisdiction + compliance boundaries
-	•	Session tracking
-	•	Settlement verb determination
-	•	Transaction construction
-	•	Relay of signed transactions
+❌ Every payment exposes infrastructure
 
-The TBC never sees private keys.
+Treasury flows, employee payroll wallets, vendor payments — all traceable.
+
+❌ Multi-step settlement flows are fragile
+
+Current Web3 wallets are not built to handle accept/fulfill/claim workflows.
 
 ⸻
 
-3. TGP Client Runtime (CP-00)
-
-A standard for how client applications behave:
-	•	Build QUERY messages
-	•	Send → TBC
-	•	Receive ACK
-	•	Construct transaction
-	•	Request wallet signature
-	•	Route signed transaction
-
-The Client holds no keys and alters no wallet behavior.
+TBC solves all of this.
 
 ⸻
 
-4. TGP Browser Extension (TGP-EX-00)
+🔐 What TBC Delivers
 
-The default implementation of the Client runtime.
-	•	Chrome MV3, Brave, Firefox, Safari compliant
-	•	Detects x402 payment_required
-	•	Injects the TGP Presence API
-	•	Routes queries to TBC
-	•	Hands final transactions to wallets
+1. Privacy Without Mixing
 
-This enables wallet-agnostic integration.
+No mixers, no tumblers, no regulatory risk.
+Just NAT-style indirection using a smart contract–driven settlement system.
 
-Wallets do not need to adopt TGP—
-they simply detect when the extension is active.
+Merchants and buyers only see what the settlement contract reveals.
 
 ⸻
 
-5. Payment Profile Contract (Settlement Layer)
+2. Composable Settlement Governance
 
-On-chain state machine:
+Multi-step escrow flows enforced by protocol:
 
-commit → accept → fulfill → verify → claim
+commit → accept → fulfill → claim → settle
 
-This enforces:
-	•	escrow logic
-	•	delivery verification
-	•	multi-step settlement flows
-	•	dispute minimization
-	•	transparent receipts (optional ZK proofs)
-
-⸻
-
-6. x402 Integration
-
-The system is fully compatible with:
-	•	Autonomous agents
-	•	dApps
-	•	Cross-domain payment negotiation
-	•	Provider-to-client negotiation flows
-
-An x402 payment_required event automatically triggers a TGP QUERY.
-
-⸻
-
-💡 Why This Matters
-
-AI agents will soon manage:
+This works for:
+	•	local delivery
+	•	digital goods
 	•	subscriptions
-	•	settlements
-	•	marketplace purchases
-	•	resource allocation
-	•	cross-domain compute payments
-	•	multi-step digital delivery flows
-
-Without TGP/TBC, they are unsafe.
-
-This project is the first practical framework that:
-	•	gives agents guardrails
-	•	gives users policy control
-	•	keeps wallets unchanged
-	•	moves settlement logic onto the chain
-	•	keeps key custody private
-	•	works across any EVM chain (PulseChain first, EVM-wide next)
+	•	staged services
+	•	agent-driven automation
 
 ⸻
 
-🧪 Demo Architecture (MVP)
+3. Wallet-Safe Checkout
 
-The first working demo will showcase:
-	•	x402 event detected
-	•	Extension triggers TGP QUERY
-	•	TBC returns commit transaction
-	•	Wallet signs
-	•	Contract logs settlement event
-	•	TBC advances next verb (fulfill → claim)
-	•	Session completes
+TBC never sees:
+	•	private keys
+	•	seed phrases
+	•	signatures
+	•	wallet internals
 
-This validates the full “economic control plane” pipeline.
+The wallet remains a blind signer, exactly as today — but safer.
 
 ⸻
 
-🛠 Build & Development
+4. Zero Custody Risk
 
-Rust (TBC & CoreProver Service)
+Funds are held in merchant-specific settlement contracts, with:
+	•	no admin keys
+	•	no upgrade keys
+	•	no backdoors
+	•	no privileged users
 
-cd coreprover-service
-cargo build
-cargo test --workspace
-
-
-⸻
-
-Browser Extension (TGP-EX-00)
-
-cd tgp-extension
-npm install
-npm run build
-
-This outputs a manifest v3 extension ready for Chrome/Brave/Edge
-and easily portable to Firefox/Safari.
+These contracts are constrained custodians:
+They hold funds but cannot be abused.
 
 ⸻
 
-Settlement Contract
+5. NAT Across Jurisdictions
 
-cd coreprover-contracts
-forge build
-forge test
+The TGP routing layer allows transaction flows across multiple gateways.
 
+Each gateway can:
+	•	apply local compliance policy
+	•	append jurisdiction metadata
+	•	add required fees
 
-⸻
+This lets merchants operate in:
+	•	multiple states
+	•	multiple countries
+	•	federated environments
 
-📅 Roadmap
-
-Phase 1 — Foundations
-	•	Implement QUERY/ACK engine
-	•	Settlement ABI integration
-	•	Basic policies
-
-Phase 2 — Browser Extension
-	•	Presence API
-	•	x402 handler
-	•	Signer routing
-
-Phase 3 — End-to-End Demo
-	•	Full commit → fulfill → claim flow
-	•	Relay mode testing
-
-Phase 4 — Agent Integration
-	•	Autonomous but constrained spending
-	•	x402 multi-step workflows
-
-Phase 5 — Enterprise / Carrier Grade
-	•	Multi-node clustering
-	•	Federated TBCs
-	•	Telemetry + Transaction Detail Records (TDRs)
-	•	Zero-trust auditing
+All while keeping their internal wallet infrastructure private.
 
 ⸻
 
-⚖️ Security Model
-	•	No custody
-	•	No keys visible to TBC or client
-	•	Wallet remains final signing authority
-	•	Public-key-only addressing
-	•	Strict separation between policy, signing, and settlement
-	•	HTTPS-only TBC interactions
-	•	Replay-safe session identifiers
-	•	Deterministic transaction construction
+⚙ How the NAT Layer Works
 
-The TBC cannot spend user funds—
-but it can deny or revise unsafe spending behaviors.
+Buyer Wallet
+   |
+   | (blind signing)
+   v
+Buyer NAT (TBC)
+   |
+   | Economic Envelope
+   v
+CoreProve Settlement Contract ←→ Merchant NAT (TBC)
+                                     |
+                                     v
+                              Merchant Treasury
 
-⸻
+The buyer and merchant can operate behind their own NAT layers.
 
-🔎 Audience
+Neither party learns the other’s true wallet.
 
-This project is built for:
-	•	Blockchain wallets
-	•	Agentic AI platforms
-	•	dApp developers
-	•	RPC providers
-	•	Financial infrastructure
-	•	Payment processors
-	•	Protocol researchers
-	•	L2/L3 builders
-
-It is designed to be open, extensible, and network-neutral.
-
-⸻
-
-🤝 Contributing
-
-We welcome:
-	•	specification improvements
-	•	implementation feedback
-	•	wallet integration proposals
-	•	agent compatibility testing
-	•	research into policy engines / ZK receipts
-
-Open a PR or start a discussion via issues.
-
-⸻
-
-🏛 License
-
-The code components follow a 48-month commercial-use license.
-The specifications are open for interoperability.
-
-⸻
-
-✉️ Contact
-
-Ledger of Earth
-Protocol Engineering & Architecture
-(TBC/TGP Project)
+Settlement happens in a neutral zone (CoreProve contract).
 

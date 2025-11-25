@@ -217,5 +217,3 @@ Open a PR or start a discussion in the issue tracker.
 	•	Code components: 48-month commercial license
 	•	Specifications: open for interoperability
 	•	A “TBC vs. traditional payment processors” comparison chart
-
-Just tell me what you want next.

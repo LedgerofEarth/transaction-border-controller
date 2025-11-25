@@ -1,175 +1,222 @@
+Understood — let’s produce a technical, expert-facing version of the README update that:
+	•	Frames Transaction NAT in rigorous networking and security terms
+	•	Explains TBC’s verification layers
+	•	Describes merchant authentication and contract validation
+	•	Positions the TBC as a deterministic verification firewall, not marketing gloss
+	•	Is appropriate to send to a CTO or security architecture team
+
+Below is the rewritten version — security-forward, technically grounded, and precise.
+
+⸻
+
 🌐 Transaction Border Controller (TBC)
 
-Private, Safe, NATted Payments for Buyers and Merchants
+A Deterministic, NAT-Style Transaction Firewall for Policy-Controlled Blockchain Settlement
 
-The Transaction Border Controller (TBC) is a transaction firewall that lets buyers and merchants transact securely without ever exposing their real wallet addresses, financial history, or operational infrastructure.
+The Transaction Border Controller (TBC) is a policy-enforced transaction firewall that performs deterministic validation, escrow sequencing, and routing of blockchain payments according to the Transaction Gateway Protocol (TGP-00).
 
-TBC provides transaction NAT — Network Address Translation — but for blockchain wallets.
+It introduces transaction NAT—an economic analogue of IP NAT—providing address obfuscation, controlled exposure, and verified settlement boundaries for both buyers and merchants.
 
-Just like IP NAT hides internal infrastructure behind a carrier-grade gateway, TBC hides buyer and merchant wallets behind a policy-controlled transaction gateway.
-
-⸻
-
-🔒 What “Transaction NAT” Means
-
-🛒 For Buyers
-	•	Your real wallet address is never exposed to the merchant.
-	•	The extension uses a delegated session key or policy key.
-	•	Merchants never see:
-	•	your main wallet
-	•	your transaction history
-	•	your token holdings
-	•	prior or future activity
-
-Your main wallet stays private — permanently.
-
-When a buyer authorizes a purchase:
-	1.	The TGP Client constructs a QUERY.
-	2.	The TBC returns an Economic Envelope.
-	3.	The wallet blindly signs the pre-constructed transaction.
-	4.	The settlement contract receives the funds.
-	5.	The merchant only sees escrow state, not the buyer’s wallet.
-
-This is payment NAT for consumers.
+The TBC operates as a Layer-8 (economic layer) gateway:
+	•	validating merchants,
+	•	verifying contract bytecode and settlement logic,
+	•	normalizing transaction envelopes,
+	•	enforcing session budgets and policy constraints,
+	•	and shielding internal wallet infrastructure from external observation.
 
 ⸻
 
-🏬 For Merchants
+🔐 1. Transaction NAT (Technical Definition)
 
-Merchants also gain NAT-level protection:
-	•	Their treasury address is never exposed to buyers.
-	•	Every payment flows through the CoreProve settlement contract, not the merchant’s hot wallet.
-	•	Settlement contracts act as isolated escrow endpoints.
+TBC provides address translation between external participants and internal wallet infrastructure in a way analogous to network NAT:
 
-Buyers never know:
-	•	the merchant’s internal wallet structure
-	•	which accounts hold operational funds
-	•	routing between merchant business units
+Buyer NAT
 
-Attack surface is dramatically reduced.
+Externally:
+	•	The seller sees an escrow address and escrow contract state.
+Internally:
+	•	The buyer’s true wallet is never revealed.
+	•	The buyer signs only pre-constructed Economic Envelopes issued by the TBC.
 
-Just like a web server behind NAT:
-	•	the merchant’s wallets cannot be DDoS’d
-	•	cannot be probed
-	•	cannot be target-profiled
+Merchant NAT
 
-All a buyer sees is the merchant’s on-chain payment profile (a contract, not a wallet).
+Externally:
+	•	The buyer interacts only with the public settlement contract, not the merchant treasury.
+Internally:
+	•	Merchant hot wallets or treasury accounts remain non-discoverable.
+	•	Routing to merchant treasury occurs behind the TBC boundary after deterministic policy validation.
 
-⸻
+Security Benefit
 
-🧩 Why Businesses Care
+Neither party learns the other’s wallet graph, preventing:
+	•	wallet scraping
+	•	transaction history disclosure
+	•	treasury profiling
+	•	targeted economic attacks
 
-Merchants today are hesitant to accept crypto because:
-
-❌ Their wallets get doxxed
-
-Once a buyer pays a merchant, the merchant’s entire financial history becomes visible.
-
-❌ They must operate hot wallets
-
-Hot wallets are dangerous and operationally expensive.
-
-❌ Every payment exposes infrastructure
-
-Treasury flows, employee payroll wallets, vendor payments — all traceable.
-
-❌ Multi-step settlement flows are fragile
-
-Current Web3 wallets are not built to handle accept/fulfill/claim workflows.
+This matches the security semantics of NAT in carrier environments: address reachability is indirect and policy-controlled.
 
 ⸻
 
-TBC solves all of this.
+🛡 2. TBC Verification Stack (L1–L6)
+
+Every inbound TGP QUERY undergoes a reproducible, deterministic verification pipeline.
+This ensures that no unauthorized, malformed, or unsafe transaction can reach settlement.
+
+L1 — Merchant Registry / Authorization
+	•	Merchant payment profile must exist in the registry.
+	•	Merchant URL, domain binding, and certificate must match the registered profile.
+	•	Merchant’s on-chain payment profile contract must match the expected interface hash.
+
+L2 — Cryptographic Validation
+	•	Session tokens and delegated keys (if present) are verified.
+	•	Nonce consistency and replay protection applied.
+	•	Delegate scope validated without maintaining state (as required by TGP statelessness).
+
+L3 — Contract Bytecode & RPC Integrity
+
+The TBC pulls authoritative on-chain state and validates:
+	•	Contract bytecode hash
+	•	ABI hash
+	•	Functions required by TGP verbs
+	•	Supported verbs (COMMIT, ACCEPT, CLAIM, WITHDRAW)
+	•	Settlement rules and payout routing
+
+If bytecode differs from the expected template → ERROR.
+
+If RPC reveals inconsistent or non-canonical state → ERROR.
+
+L4 — Optional ZK / Attestation
+
+If the merchant requires shielded invocation:
+	•	Buyer proves ownership of nullifier
+	•	Merkle membership path validated
+	•	Spending authority or identity granted via ZK proof
+
+This allows privacy without reducing determinism.
+
+L5 — Policy Evaluation
+	•	Merchant-defined policy
+	•	Buyer session spend limit
+	•	Rate limits
+	•	Jurisdictional constraints
+	•	Contract-specific rules (digital goods vs services)
+	•	Anti-abuse heuristics
+
+All policy decisions map to deterministic ACK(status) results.
+
+L6 — Escrow / WITHDRAW Eligibility
+
+The TBC checks:
+	•	Timers
+	•	Escrow state transitions
+	•	Eligibility for buyer/seller withdrawal
+	•	Whether claim/fulfill prerequisites are met
+
+With TBC performing these checks no wallet or client must understand the settlement state machine.
 
 ⸻
 
-🔐 What TBC Delivers
+🧩 3. Security Properties
 
-1. Privacy Without Mixing
+The TBC enforces:
 
-No mixers, no tumblers, no regulatory risk.
-Just NAT-style indirection using a smart contract–driven settlement system.
+1. Deterministic Authorization
 
-Merchants and buyers only see what the settlement contract reveals.
+Two gateways with identical configuration will produce identical results for the same QUERY.
 
-⸻
+2. Wallet Blindness
 
-2. Composable Settlement Governance
+The wallet signs only what it sees.
+No signatures are intercepted.
+The TBC never receives private keys.
 
-Multi-step escrow flows enforced by protocol:
+3. Stateless Verification
 
-commit → accept → fulfill → claim → settle
+All verification state is contained in:
+	•	the QUERY
+	•	the Economic Envelope
+	•	on-chain settlement contracts
 
-This works for:
-	•	local delivery
-	•	digital goods
-	•	subscriptions
-	•	staged services
-	•	agent-driven automation
+The TBC does not maintain mutable per-session state, preventing session hijacking.
 
-⸻
+4. Non-Custodial Funds Handling
 
-3. Wallet-Safe Checkout
-
-TBC never sees:
-	•	private keys
-	•	seed phrases
-	•	signatures
-	•	wallet internals
-
-The wallet remains a blind signer, exactly as today — but safer.
-
-⸻
-
-4. Zero Custody Risk
-
-Funds are held in merchant-specific settlement contracts, with:
+Funds are held by merchant-owned settlement contracts with:
 	•	no admin keys
-	•	no upgrade keys
-	•	no backdoors
-	•	no privileged users
+	•	no upgradability
+	•	no backdoor transitions
+	•	no off-chain trustees
 
-These contracts are constrained custodians:
-They hold funds but cannot be abused.
+Every transition is enforced by protocol verbs.
 
-⸻
+5. Merchant Authentication
 
-5. NAT Across Jurisdictions
+No merchant can initiate a payment flow unless:
+	•	payment profile contract matches its registry entry
+	•	bytecode matches required template
+	•	routing addresses and fee structures are validated
+	•	TLS & domain binding are correct
 
-The TGP routing layer allows transaction flows across multiple gateways.
-
-Each gateway can:
-	•	apply local compliance policy
-	•	append jurisdiction metadata
-	•	add required fees
-
-This lets merchants operate in:
-	•	multiple states
-	•	multiple countries
-	•	federated environments
-
-All while keeping their internal wallet infrastructure private.
+This prevents spoofed merchants, phishing flows, and counterfeit payment endpoints.
 
 ⸻
 
-⚙ How the NAT Layer Works
+🔄 4. Transaction Flow (Technical)
 
-Buyer Wallet
-   |
-   | (blind signing)
-   v
-Buyer NAT (TBC)
-   |
-   | Economic Envelope
-   v
-CoreProve Settlement Contract ←→ Merchant NAT (TBC)
-                                     |
-                                     v
-                              Merchant Treasury
+Buyer Client             TBC Gateway               Settlement Contract        Merchant Backend
+    |                        |                           |                         |
+    | -- QUERY ------------> |                           |                         |
+    |                        | -- L1–L6 Validation -->   |                         |
+    |                        |                           |                         |
+    | <-- ACK(allow) ------- |                           |                         |
+    | -- Signed Tx --------> | -- relay or direct -----> |                         |
+    |                        |                           | -- emits events ------> |
+    |                        | <-- SETTLE -------------- |                         |
 
-The buyer and merchant can operate behind their own NAT layers.
+At no point does buyer ↔ merchant direct wallet exposure occur.
 
-Neither party learns the other’s true wallet.
+⸻
 
-Settlement happens in a neutral zone (CoreProve contract).
+🧱 5. Why This Matters for Security Engineering
 
+Prevention of direct wallet discovery
+
+Attackers cannot map:
+	•	merchant treasury habits
+	•	buyer token balances
+	•	historical buying/selling activity
+	•	internal treasury structure
+
+Centralized risk moves out of wallets and into on-chain constraints
+
+Smart contracts enforce constraints without requiring trust in the TBC.
+
+Auditable transaction pipeline
+
+Every step:
+	•	QUERY
+	•	ACK
+	•	Economic Envelope
+	•	Signed Tx
+	•	SETTLE
+
+is independently verifiable.
+
+Policy-first architecture
+
+Contract settlement logic remains immutable.
+Policy enforcement is off-chain and adjustable without contract redeployments.
+
+⸻
+
+✔ This version is suitable for a technical prospect.
+
+If you’d like, I can also produce:
+	•	A merchant-specific technical addendum
+	•	A buyer privacy assurance document
+	•	A security architecture whitepaper
+	•	A TBC–merchant integration guide
+	•	A diagram-focused version for CTO slides
+
+Just say the word.

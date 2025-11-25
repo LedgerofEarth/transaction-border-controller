@@ -1,14 +1,3 @@
-Understood — let’s produce a technical, expert-facing version of the README update that:
-	•	Frames Transaction NAT in rigorous networking and security terms
-	•	Explains TBC’s verification layers
-	•	Describes merchant authentication and contract validation
-	•	Positions the TBC as a deterministic verification firewall, not marketing gloss
-	•	Is appropriate to send to a CTO or security architecture team
-
-Below is the rewritten version — security-forward, technically grounded, and precise.
-
-⸻
-
 🌐 Transaction Border Controller (TBC)
 
 A Deterministic, NAT-Style Transaction Firewall for Policy-Controlled Blockchain Settlement

@@ -1,297 +1,365 @@
-📗 TGP-EX-00 — Transaction Gateway Protocol: Browser Extension Runtime
+📗 TGP-EXT-00 v1.1 — Transaction Gateway Protocol: Extension Runtime
 
-Version: 0.1-draft
+Version: 1.1
 Status: Draft (internal)
 Author: Ledger of Earth
-Audience: Browser extension developers, wallet developers, agent-framework developers
-Purpose: Define the browser-resident runtime that implements TGP-CP-00 securely, safely, and compatibly with Chrome MV3, Firefox, Brave, Edge, and Safari.
+Audience: Browser extension developers, wallet developers, agent-framework implementers
+Scope: Defines the browser-resident runtime that implements TGP-CP-00 securely, safely, and compatibly with Chrome MV3, Firefox, Brave, Edge, and Safari.
 
 ⸻
 
 0. Overview
 
-The TGP Extension Runtime (TGP-EX) is the default implementation of the TGP Client defined in TGP-CP-00. It allows any wallet—without modification—to participate in protected TGP/TBC-mediated transactions.
+The TGP Extension Runtime (TGP-EXT) is the default browser implementation of the TGP Client described in TGP-CP-00. It enables any wallet—without modification—to participate in protected blockchain transactions mediated through a payment gateway such as a Transaction Border Controller (TBC).
 
 The extension:
-	•	listens for x402 payment_required events
-	•	constructs and sends TGP QUERY to the TBC
-	•	receives and obeys TGP ACK
-	•	constructs blockchain transactions exactly as instructed
-	•	forwards transactions to wallets for signing
-	•	routes signed transactions to RPC or TBC relay endpoints
+	•	Detects HTTP 402 Payment Required (canonical trigger)
+	•	Optionally detects x402 metadata as a secondary trigger
+	•	Constructs and sends TGP QUERY messages
+	•	Receives and obeys TGP ACK responses
+	•	Builds blockchain transactions exactly as instructed
+	•	Hands transactions to the wallet for signing
+	•	Routes signed transactions per ACK routing rules
+	•	Tracks escrow state locally
+	•	Listens for SETTLE notifications
 
-The extension never handles private keys or intercepts wallet popups.
+The extension never generates private keys, modifies wallets, or intercepts wallet popups.
 
 ⸻
 
 1. Architectural Model
 
-The TGP Extension consists of:
+The browser extension consists of four logical components:
 
-1. Background Service Worker
-	•	Implements QUERY/ACK communication
-	•	Constructs transactions
-	•	Handles routing
-	•	Maintains minimal session state
-	•	Event-driven (MV3 compliant)
+1.1 Background Service Worker (MV3-Compliant)
+	•	Implements QUERY → ACK loop
+	•	Constructs Economic Envelope transactions
+	•	Routes signed transactions
+	•	Receives SETTLE and ERROR messages
+	•	Maintains minimal, non-persistent escrow tracking
 
-2. Content Script (Isolated World)
-	•	Detects x402 payment_required signals on dApp pages
-	•	Injects TGP Presence API object (window.tgp)
-	•	Listens/forwards events
-	•	DOES NOT read or interact with sensitive DOM nodes
+1.2 Content Script (Isolated World)
+	•	Detects HTTP 402 and x402 payment-required signals
+	•	Injects the TGP Presence API (window.tgp)
+	•	Forwards permitted fields to the background worker
+	•	DOES NOT read or manipulate sensitive DOM elements
 
-3. UI Components
-	•	Popup for user settings (TBC URL, enable/disable TGP, logs)
-	•	Optional badge (TGP Active indicator)
+1.3 UI Components
+	•	Popup UI (settings, active escrow, WITHDRAW action)
+	•	Badge indicator (stateful escrow visualization)
+	•	Optional notifications
 
-4. Local Storage
-	•	Stores:
-	•	session metadata
-	•	TBC URL
-	•	Never stores:
-	•	private keys
-	•	wallet seeds
-	•	signed transactions
+1.4 Local Storage
+
+Stores only:
+	•	TBC/Gateway endpoint
+	•	Session metadata
+	•	Active escrow tracking
+
+MUST NOT store:
+	•	Private keys
+	•	Wallet seeds
+	•	Signed transactions
+	•	Sensitive merchant data
 
 ⸻
 
 2. Permissions (Strict Minimum)
 
-A compliant extension MUST request only:
+A compliant TGP-EXT extension MUST request only:
 
 Permission	Purpose
-storage	TBC endpoint & session metadata
-activeTab	Detect x402 events from page
+storage	TBC endpoint & minimal metadata
+activeTab	Detect 402 or x402 events
 scripting	Inject Presence API object
 notifications	Optional user alerts
 host permissions	Only for user-entered TBC endpoint
 
 Forbidden permissions:
-	•	webRequestBlocking (highly scrutinized)
-	•	clipboardRead or clipboardWrite
-	•	Any password/credential access
-	•	Reading or modifying wallet popups
-	•	Access to browser internal APIs related to keys
+	•	webRequestBlocking
+	•	Clipboard read/write
+	•	Password or credential access
+	•	Wallet popup inspection or modification
+	•	Browser-internal key/crypto API access
 
-This ensures storefront approval across Chrome, Brave, Firefox, Safari.
+These requirements ensure compliance across all major extension marketplaces.
 
 ⸻
 
 3. Event Flow
 
-3.1 Step-by-step sequence
-
-1. x402 detected
-Content script receives a payment_required x402 message from the page.
-
-2. Message forwarded
-Content script → background worker via extension messaging.
-
-3. QUERY constructed
-Extension creates a TGP QUERY using TGP-CP-00 format.
-
-4. QUERY → TBC
-Background worker sends HTTPS request to user-provided TBC endpoint.
-
-5. ACK received
-Extension receives TGP ACK with transaction instructions.
-
-6. Construct transaction
-Extension builds transaction exactly per ACK instructions (to, data, value, chain_id).
-
-7. Request wallet signature
-Extension triggers ethereum.request({method: 'eth_sendTransaction'...}) or equivalent.
-
-8. Wallet signs normally
-Wallet remains ignorant of TGP.
-Only shows a standard transaction popup.
-
-9. Route signed tx
-Extension routes per ACK:
+3.1 Standard Sequence
+	1.	Trigger Detected
+Content script detects HTTP 402 or x402 payment_required.
+	2.	Forward Event
+Content script → background worker (via messaging).
+	3.	Construct QUERY
+Background worker builds a valid TGP QUERY per TGP-CP-00.
+	4.	Send to Gateway
+QUERY → HTTPS → Gateway (TBC or other).
+	5.	Receive ACK
+Extension processes authorization or preview state.
+	6.	Construct Transaction
+Using ACK’s Economic Envelope (to, data, value, chain_id, gas).
+	7.	Request Wallet Signature
+ethereum.request({ method: “eth_sendTransaction”, … }).
+	8.	Wallet Signs
+Wallet shows standard popup; user approves.
+	9.	Route Signed Transaction
 	•	direct → RPC
 	•	relay → TBC endpoint
-
-10. Escrow sequencing
-If next_verb not terminal, the extension loops back to step 3.
-
-⸻
-
-4. TBC Communication Requirements
-
-A TGP-EX-compliant extension MUST:
-	•	use HTTPS
-	•	validate certificates
-	•	reject non-TLS endpoints
-	•	use short-lived fetch() calls (no persistent background pages)
-
-Optional (Agent Mode only):
-	•	user-approved WebSocket to TBC
-
-The extension MUST NOT:
-	•	leak metadata to any server except the user’s TBC
-	•	connect to third-party analytics
-	•	phone home
-	•	maintain long-running hidden loops (MV3 violation)
+	10.	Escrow Sequencing
+If ACK defines a next verb, extension loops to step 3.
 
 ⸻
 
-5. x402 Integration
+4. Gateway Communication Requirements
 
-The extension MUST support x402 event detection via:
-	•	content script listening to window.postMessage
-	•	detecting standard payment_required fields
-	•	forwarding minimal fields to background worker
+The extension MUST:
+	•	Use HTTPS for QUERY and relay submission
+	•	Validate TLS certificates
+	•	Reject non-secure endpoints
+	•	Use short-lived fetch() calls (MV3 requirement)
+	•	NEVER open persistent or hidden background loops
+
+Agent Mode (optional):
+	•	MAY open a user-approved WebSocket
+	•	MUST NOT open a WebSocket without explicit user action
 
 The extension MUST NOT:
-	•	parse or modify confidential merchant content
-	•	read arbitrary DOM content beyond x402 event payload
+	•	Leak metadata to any endpoint except the configured Gateway
+	•	Contact analytics or telemetry services
+	•	Phone home
+
+⸻
+
+5. HTTP 402 & x402 Integration
+
+The extension MUST support:
+	•	HTTP 402 Payment Required (primary trigger)
+	•	Optional x402 compatibility for legacy flows
+
+Content script MUST:
+	•	Listen for window.postMessage events
+	•	Extract ONLY required payment fields
+	•	Forward minimal metadata to the background worker
+
+Content script MUST NOT:
+	•	Parse confidential merchant DOM
+	•	Read arbitrary DOM nodes
+	•	Infer user intent outside the 402/x402 event
 
 ⸻
 
 6. Transaction Construction Requirements
 
-A TGP-EX MUST:
-	•	use ACK transaction parameters verbatim
-	•	not modify calldata or destination
-	•	not override chain_id
-	•	not inject extra fields
+The extension MUST:
+	•	Use Economic Envelope parameters verbatim
+	•	Never override to, data, value, chain_id, or gas fields
+	•	Follow routing directives exactly
+	•	Refuse to construct a transaction if ACK is malformed
 
-A TGP-EX MUST NOT:
-	•	broadcast unsigned transactions
-	•	bypass user wallet confirmations
-	•	request private keys
-	•	perform signing internally
+The extension MUST NOT:
+	•	Broadcast unsigned transactions
+	•	Bypass wallet UI
+	•	Perform internal signing
+	•	Inject or reorder calldata
 
-Wallet is the signer.
-Extension is the policy/router.
+Wallets remain blind signers.
 
 ⸻
 
 7. TGP Presence API (Wallet-Detected Signal)
 
-(NEW — final version)
-
-The extension MUST expose a “presence flag” detectable by wallets.
+The extension MUST expose a presence flag detectable by wallets.
 
 7.1 window.tgp Injection
 
-Injected via isolated-world content script:
-
 window.tgp = {
-  version: "0.1",
+  version: “1.1”,
   active: true,
-  tbc: {
-    reachable: true | false
-  }
+  tbc: { reachable: true | false }
 };
-
-Wallets MAY read:
-
-if (window.tgp?.active) {
-    // enable TGP indicator
-}
 
 7.2 Presence Event
 
-Extension MUST emit:
-
 document.dispatchEvent(
-  new CustomEvent("tgp:present", {
-    detail: {
-      version: "0.1",
-      reachable: true | false
-    }
+  new CustomEvent(“tgp:present”, {
+    detail: { version: “1.1”, reachable: true | false }
   })
 );
 
-Wallets MAY subscribe:
-
-document.addEventListener("tgp:present", (e) => {
-  // Wallet knows TGP is active
-});
+Wallets MAY subscribe to detect TGP availability.
 
 7.3 Security Constraints
 
 Presence API MUST NOT expose:
-	•	TBC URL
-	•	session IDs
-	•	routing data
-	•	merchant profiles
-	•	x402 metadata
-	•	any blockchain transaction data
-
-It MAY expose only:
-	•	active
-	•	version
-	•	TBC reachability boolean
+	•	Gateway URL
+	•	Session tokens
+	•	Payment profiles
+	•	Routing or path metadata
+	•	Transaction calldata
 
 ⸻
 
 8. Security Requirements
 
-The TGP Extension MUST NOT:
-	•	request seed phrases
-	•	display misleading transaction details
-	•	observe or modify wallet UI
-	•	intercept popups
-	•	monitor keystrokes
-	•	inspect password fields
-	•	scrape DOM
-	•	capture wallet RPC traffic
+The extension MUST NOT:
+	•	Request seed phrases
+	•	Intercept or alter wallet popups
+	•	Scrape passwords or sensitive DOM
+	•	Capture RPC traffic
+	•	Spoof transaction details
 
 The extension MUST:
-	•	operate purely as a router + policy client
-	•	keep all behavior transparent
-	•	remain auditable
+	•	Operate strictly as router + policy client
+	•	Maintain transparency
+	•	Be auditable and deterministic
 
 ⸻
 
 9. Browser Compliance
 
 Chrome MV3
-	•	Must use service_worker
-	•	No persistent background scripts
-	•	Script injection must use isolated worlds
+	•	Service worker required
+	•	No persistent background pages
+	•	Script injection via isolated worlds
 
 Firefox
-	•	Equivalent behavior allowed
-	•	Background page may be permitted, but MUST mimic MV3 restrictions for portability
+	•	May allow background pages, but extension MUST emulate MV3 behavior
 
-Safari/WKWebExtension
-	•	Tightly sandboxed; extension must minimize permissions
-	•	Content script MUST avoid sensitive DOM access
+Safari
+	•	Strict sandboxing
+	•	Content script MUST avoid sensitive DOM reads
 
 ⸻
 
 10. Compliance Tests
 
-A TGP-EX implementation MUST pass:
+A compliant extension MUST pass:
 	1.	Presence API test
-	•	window.tgp exposed
-	•	tgp:present event emitted
-	2.	x402 detection test
-	•	Content script passes payment_required reliably
+	2.	402/x402 detection test
 	3.	QUERY/ACK loop test
-	•	Proper handling of TBC responses
 	4.	Transaction construction correctness
 	5.	Wallet integration test
-	•	Standard signing popup triggered
-	6.	Routing correctness test
-	•	RPC vs TBC relay modes
+	6.	Routing correctness
 	7.	Escrow sequencing test
-	8.	Security sandbox test
-	•	No forbidden DOM access
+	8.	Sandbox & isolation test
 
 ⸻
 
-End of Finalized TGP-EX-00 Draft
+11. ERROR Handling (New in v1.1)
+
+11.1 ERROR Notification
+
+When receiving a TGP ERROR, the extension MUST:
+	•	Display a visible notification
+	•	Present error.code and error.message
+	•	Provide actionable guidance
+	•	Log to local diagnostics (optional)
+
+It MUST NOT auto-retry or suppress the error.
+
+11.2 Session Abort
+
+Upon ERROR:
+	•	Mark session as failed
+	•	Disable pending actions
+	•	Clear transient extension-side state
 
 ⸻
 
-This spec is now polished, self-contained, and ready for:
-	•	GitHub
-	•	the protocol doc folder
-	•	inclusion in the TGP-00 umbrella spec
-	•	sharing with KD / wallet devs when appropriate
-	•	internal engineering alignment
+12. Escrow Monitoring (New in v1.1)
+
+The extension maintains minimal local escrow state.
+
+12.1 Escrow Record
+
+Stored per active escrow:
+	•	escrow_id
+	•	state (PENDING, ACCEPTED, etc.)
+	•	created_at
+	•	ttl
+	•	party_role
+	•	next_verb
+
+12.2 TTL Monitoring
+
+The extension MUST:
+	•	Compute time_remaining
+	•	Emit warnings prior to timeout
+	•	Update badge state
+
+MUST NOT:
+	•	Poll blockchain aggressively
+	•	Trigger automatic withdrawal
+
+12.3 SETTLE Handling
+
+When a Gateway emits SETTLE:
+	•	Escrow finalizes
+	•	TTL monitoring stops
+	•	UI updates to final state
+
+⸻
+
+13. WITHDRAW Eligibility & Initiation (New in v1.1)
+
+13.1 L6 Eligibility Detection
+
+WITHDRAW eligible when:
+	•	Buyer: state = PENDING & TTL expired
+	•	Seller: state = ACCEPTED & TTL expired
+	•	Cooperative: both parties submit release intent (future optional)
+
+13.2 User Notification
+
+When eligible:
+	•	Notify: “Withdrawal available”
+	•	Update badge
+	•	Enable WITHDRAW button in popup
+
+13.3 WITHDRAW Action
+
+Upon confirmation, extension MUST construct:
+
+QUERY {
+  type: “QUERY”,
+  intent: { verb: “WITHDRAW”, party: “BUYER” | “SELLER” },
+  escrow_id: “0xEscrow”,
+  chain_id: …,
+  payment_profile: “0x…”
+}
+
+ACK MUST be followed exactly.
+
+⸻
+
+14. Multi-Verb State Display (New in v1.1)
+
+14.1 Badge States
+
+Color	Meaning
+Gray	Idle
+Blue	PENDING
+Yellow	ACCEPTED
+Green	CLAIMED/RELEASED
+Red	ERROR/REFUNDED
+
+14.2 Popup Escrow Panel
+
+Popup MUST show:
+	•	Current escrow state
+	•	Time remaining
+	•	Next verb
+	•	Actions (ACCEPT, CLAIM, WITHDRAW)
+	•	Simple step history
+
+Popup MUST NOT expose:
+	•	Wallet addresses
+	•	Routing metadata
+	•	Merchant identifiers
+
+⸻
+
+End of TGP-EXT-00 v1.1

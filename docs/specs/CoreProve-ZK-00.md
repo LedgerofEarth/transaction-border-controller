@@ -1,375 +1,316 @@
-# CoreProver-ZK-00  
-### Zero-Knowledge Proof Architecture for CoreProver Settlement  
-**Version:** 0.1-draft  
-**Status:** Informational  
-**Authors:** David Bigge, Shannon Jolin  
-**Company:** Ledger of Earth, LLC  
-**Applies to:** TBC-00, TGP-00, TBC-SEC-00, CoreProver-Escrow-00
+📘 CoreProve-ZK-01 (Corrected Edition)
 
-—
+Zero-Knowledge Integration Specification
 
-# 0. Purpose
+Version: 1.1-corrected
+Status: Integration-Ready
+Company: Ledger of Earth, LLC
 
-This document defines the **Zero-Knowledge (ZK) proof architecture** for the
-CoreProver settlement system.  
-It describes:
+All conceptual mistakes resolved.
+All diagrams updated.
+All flows corrected to reflect:
+	•	Extension generates ZK proofs
+	•	TBC verifies ZK proofs
+	•	Settlement contract receives only public outputs
+	•	ZK is never sent to the blockchain
+	•	ReceiptVault stores only proof hashes
 
-- what must be proven via SNARKs,  
-- where proofs are verified,  
-- how proofs integrate with TBC routing and policy flow,  
-- how proofs interact with CoreProver escrow contracts,  
-- how proof hashes are stored in Receipt NFTs, and  
-- how full proofs are archived for long-term compliance.
+⸻
 
-This document **does not** define the underlying circuit math.  
-It defines the **statements** that must be proven and the **interfaces** required
-for verification.
+0. Purpose
 
-—
+This document defines the Zero-Knowledge (ZK) integration model for CoreProve.
 
-# 1. Architectural Positioning
+It specifies:
+	•	what must be proven
+	•	where proofs are generated
+	•	where proofs are verified
+	•	how nullifiers, timestamps, and pk_hashes flow into settlement contracts
+	•	how proofs anchor into Receipt NFTs
+	•	how proofs remain verifiable decades into the future
 
-SNARKs exist **between**:
+This spec defines ZK statements and data interfaces, not circuit math.
 
-- TBC-SEC-00 (security & policy decision tree)  
-and  
-- CoreProver-Escrow-00 (on-chain settlement)
+⸻
 
-The ZK layer performs **post-security, pre-settlement** verification.
+1. Correct Architectural Position
 
-TBC-00 → TGP-00 → TBC-SEC-00 → CoreProver-ZK-00 → CoreProver-Escrow-00
+ZK proofs are:
+	•	generated in the Extension
+	•	verified inside the TBC
+	•	never uploaded to the settlement contract
+	•	reduced to public inputs + nullifiers for the contract
 
-This preserves:
+Correct CoreProve ZK pipeline:
 
-- layered architecture  
-- TBC routing independence  
-- minimal coupling to cryptographic systems  
-- optional merchant-level ZK requirements
+EXTENSION
+    │
+    │  (Generate ZK proof: ZKB-01, ZKS-01, ZKM-01)
+    ▼
+TGP-EXT
+    │
+    │  (Deliver proof & public inputs to TBC)
+    ▼
+TBC
+    │
+    │  (Verify SNARK off-chain)
+    │
+    ▼
+TBC-ZK Verification Layer
+    │
+    │  (Extract public inputs)
+    │  (Bind nullifier)
+    │  (Bind timestamps & pkHash)
+    ▼
+Settlement Instruction Builder
+    │
+    │  (ABI: BuyerZKProof, SellerZKProof)
+    ▼
+CoreProve Settlement Contract (on-chain)
+    │
+    ▼
+ReceiptVault (anchors proof hashes & public inputs)
 
-—
+Key correction:
+The blockchain sees only public circuit outputs, not the ZK proof.
 
-# 2. Goals
+⸻
 
-ZK proofs in CoreProver must provide:
+2. ZK Goals (Unchanged, but clarified)
 
-### 2.1 Privacy  
-Users transact using session wallets without exposing root wallets.
+Privacy
 
-### 2.2 Integrity  
-Merchants and sellers cannot falsify fulfillment or contract data.
+Buyers/sellers never expose root wallets, signatures, or identity.
 
-### 2.3 Auditability  
-Receipt NFTs must remain verifiable decades into the future.
+Integrity
 
-### 2.4 Flexibility  
-Merchants choose when ZK proofs are required.
+Proofs ensure the right actor performed the right action.
 
-### 2.5 Cost-Efficiency  
-SNARK verification occurs off-chain in the TBC whenever possible.
+Replay Prevention
 
-—
+Nullifiers bind proofs to single-use actions.
 
-# 3. Proof Types
+Auditability
 
-CoreProver uses **three** SNARK-based proofs.
+ReceiptVault stores verifiable hashes, not proofs.
 
-| Proof | Name | Actor | Purpose |
-|——|——|-——|———|
-| ZKB-01 | Buyer Deposit Proof | Buyer | Proves deposit + session→root linkage |
-| ZKS-01 | Seller Fulfillment Proof | Seller | Proves fulfillment or counter-escrow |
-| ZKM-01 | Merchant Policy Integrity Proof | Merchant | Proves correctness of contract & policy |
+Cost Efficiency
 
-All proofs are **statement-level primitives**.  
-Their internal circuit structure is out-of-scope for this document.
+All SNARK verification happens off-chain in the TBC.
 
-—
+⸻
 
-# 4. Merchant Policy Flags
+3. Proof Types (Clarified)
 
-ZK requirements are configured per merchant within the Payment Profile:
+Code	Name	Actor	Purpose
+ZKB-01	Buyer Deposit Proof	Buyer	Prove deposit + root/session linkage
+ZKS-01	Seller Fulfillment Proof	Seller	Prove seller authorized fulfillment
+ZKM-01	Merchant Policy Integrity	Merchant	Prove policy & code integrity
 
-requireZKBuyerDeposit: true | false
-requireZKSellerFulfillment: true | false
-requireZKPolicyIntegrity: true | false
+Important correction:
+All proofs are generated in the Extension, not the TBC.
 
-Defaults:
+⸻
 
-- Buyer Deposit Proof: OPTIONAL  
-- Seller Fulfillment Proof: OPTIONAL  
-- Policy Integrity Proof: OPTIONAL
+4. Merchant ZK Flags (Clarified)
 
-Merchants operating under higher security, compliance, or luxury-goods
-conditions may require any or all of these proofs.
+Merchant payment profile dictates:
 
-—
+requireZKBuyerDeposit: true|false
+requireZKSellerFulfillment: true|false
+requireZKPolicyIntegrity: true|false
 
-# 5. Verification Model
+TBC enforces these flags in the settlement path.
 
-## 5.1 TBC-First Verification (Fast Path)
+⸻
 
-All SNARK proofs are verified **off-chain** by the TBC whenever possible.
+5. Verification Model (Corrected)
 
-Reasons:
+5.1 Off-Chain Verification (Primary)
 
-- fast response  
-- low cost  
-- reduced gas burden  
-- no chain congestion  
-- flexible circuit upgrade path
+The TBC verifies:
+	•	the SNARK
+	•	nullifier freshness
+	•	pkHash correctness
+	•	timestamp window
+	•	merchant ZK policy
 
-## 5.2 Smart-Contract Verification (Fallback Path)
+NO ZK verifier exists on-chain in v0.2.1.
 
-If required by merchant policy or audit conditions:
+5.2 On-Chain Verification (Fallback)
 
-- CoreProver escrow contracts can verify the SNARK on-chain  
-- only Groth16 verifiers MUST exist on-chain  
-- PLONK/other circuits MAY be accepted via external verifier contracts
+If a merchant requires it (future version):
+	•	Groth16 verifier may be plugged in
+	•	Settlement contract may call verifier contract
 
-—
+This is optional.
 
-# 6. Proof Delivery Format
+⸻
 
-Proofs are delivered inside TGP messages via:
+6. TGP-EXT ZK Delivery (Corrected)
 
-zk_proof: base64url(SNARK proof bytes)
-zk_inputs: array of public inputs
-zk_type: ZKB01 | ZKS01 | ZKM01
-zk_vk_id: verifier key identifier
+TGP-EXT sends:
 
-The TBC extracts, verifies, and attaches settlement-level proof metadata.
+zk_proof      : raw SNARK proof bytes
+zk_inputs     : public inputs for SNARK
+zk_type       : ZKB01 | ZKS01 | ZKM01
+zk_nullifier  : random oracle nullifier
+zk_timestamp  : timestamp bound inside proof
+session_pubkey: extension ephemeral pubkey
 
-—
+TBC verifies SNARK and then rewrites into the minimal structure required by contract.
 
-# 7. Proof Statements (Informal)
+⸻
 
-Below are the required statements.  
-Circuit math is out-of-scope; statements must be provable by a SNARK.
+7. Proof Statements (Corrected + Expanded)
 
-—
+7.1 ZKB-01 — Buyer Deposit Proof
 
-## 7.1 ZKB-01 — Buyer Deposit Proof
+Buyer proves:
+	1.	They control the session wallet.
+	2.	Session is linked to buyer root wallet (ZK-NAT).
+	3.	Deposit amount matches amount committed.
+	4.	Deposit signature matches session wallet.
+	5.	Nullifier is unique.
+	6.	Timestamp is fresh.
 
-The buyer must prove:
+Contract sees only:
+	•	amount
+	•	pkHash
+	•	nullifier
+	•	timestamp
 
-1. A deposit of `<amount>` was made to the escrow contract.  
-2. The deposit originated from a **session wallet** whose private key is known.  
-3. The session wallet is **cryptographically linked** to a buyer **root wallet**  
-   (ZK-NAT linkage).  
-4. No identifying data is revealed in the process.
+⸻
 
-**Public Inputs:**
+7.2 ZKS-01 — Seller Fulfillment Proof
 
-- escrow_address  
-- amount  
-- session_pubkey  
-- deposit_tx_hash  
-- chain_id  
+Seller proves:
+	1.	They control merchant’s signing key.
+	2.	They authorized fulfillment for this specific order.
+	3.	Nullifier is unique.
+	4.	Timestamp is fresh.
 
-**Private Witness:**
+Contract sees only:
+	•	pkHash
+	•	nullifier
+	•	timestamp
+	•	orderHash
 
-- root_privkey  
-- session_privkey  
-- linkage_nonce  
-- deposit_signature  
+⸻
 
-—
+7.3 ZKM-01 — Merchant Policy Integrity Proof (Optional)
 
-## 7.2 ZKS-01 — Seller Fulfillment Proof
+Merchant proves:
+	1.	Policy contract bytecode matches canonical hash.
+	2.	Chain id is correct.
+	3.	They authorized the policy.
 
-Two fulfillment paths exist:
+Contract sees nothing (merchant proofs do not go on-chain).
+Only the TBC enforces this.
 
-### A. Seller Signature
-Prove knowledge of seller private key used to sign fulfillment hash.
+⸻
 
-### B. Counter-Escrow (optional)
-Prove posting of counter-escrow as required by merchant profile.
+8. Receipt Anchoring (Corrected)
 
-**Public Inputs:**
+ReceiptVault stores:
+	•	proof_buyer_hash
+	•	proof_seller_hash
+	•	proof_policy_hash
+	•	public_inputs_hash
+	•	timestamp
+	•	settlement metadata
 
-- fulfillment_hash  
-- seller_pubkey  
-- order_id  
+Receipts never store full proofs.
 
-**Private Witness:**
+Receipts never reveal buyer or seller identity.
 
-- seller_privkey  
-- counter_escrow_witness (if used)
+Receipts never reveal witness data.
 
-—
-
-## 7.3 ZKM-01 — Merchant Policy Integrity Proof
-
-Merchant must prove:
-
-1. The policy contract address is correct.  
-2. The contract bytecode matches the advertised `policy_hash`.  
-3. The chain ID matches the configured settlement chain.  
-4. No tampering occurred.
-
-**Public Inputs:**
-
-- policy_contract_address  
-- policy_hash  
-- chain_id  
-
-**Private Witness:**
-
-- merchant_privkey (optional)  
-- contract_bytecode_hash (if required)
-
-—
-
-# 8. Receipt NFT Integration
-
-Receipt NFTs MUST store:
-
-buyer_proof_hash
-seller_proof_hash
-merchant_proof_hash
-public_inputs_hash
-fulfillment_profile_id
-policy_hash
-
-NFTs MUST NOT store:
-
-- full proofs  
-- private witness elements  
-- signature material  
-- circuit structure  
-- proving keys
-
-Hashing algorithm:
+Hashing:
 
 proof_hash = SHA256(zk_proof_bytes)
+inputs_hash = SHA256(public_inputs_bytes)
 
-—
 
-# 9. Proof Archival Model
+⸻
 
-CoreProver uses a **hybrid archival model**:
+9. Archival Model (Corrected)
 
-### 9.1 On-chain (Receipt NFT)
-Stores only **hashes** of proofs and public inputs.
+On-Chain
 
-### 9.2 Receipt Vault (optional)
-Stores **full proofs** for merchants requiring compliance retention.
+Only proof hashes + public input hashes.
 
-Vault storage MAY include:
+Off-Chain (Entire Proof)
+	•	extension device
+	•	merchant servers
+	•	ReceiptVault (optional)
+	•	IPFS/Filecoin
 
-- IPFS  
-- merchant-hosted storage  
-- CoreProver cluster storage  
-- end-user local storage (browser extension)  
+Reproducibility
 
-### 9.3 Deterministic Re-Generation
-Any proof MAY be recreated using:
+Given the NFT’s public inputs + the witness retained by the user,
+the proof can be regenerated even decades later.
 
-- NFT’s public_inputs  
-- buyer/seller/merchant retained witness  
-- same circuit version
+⸻
 
-This ensures multi-decade audit resilience even if archives disappear.
+10. Circuit Systems (No change, but clarified)
+	•	Groth16 for on-chain
+	•	PLONK for off-chain
+	•	Recursive SNARK future
 
-—
+⸻
 
-# 10. Circuit Systems
+11. Integration with TBC (Corrected)
 
-CoreProver supports a **hybrid circuit strategy**:
+Precise flow:
 
-### 10.1 Groth16 (Primary)
-- cheap verification on PulseChain  
-- small proofs  
-- required for on-chain verifiers
+Extension (produce proof)
+    → TGP (deliver proof)
+        → TBC (verify)
+            → rewrite to public inputs
+                → settlement tx
+                    → CoreProve contract
+                        → ReceiptVault
 
-### 10.2 PLONK (Optional)
-- universal setup  
-- flexible circuit upgrades  
-- off-chain verifier only (for now)
+If verification fails → REJECT: ZK_INVALID_PROOF.
 
-Future versions MAY introduce recursive verification.
+⸻
 
-—
+12. Integration with SettlementContract v0.2.1 (Corrected)
 
-# 11. Integration with TBC-SEC-00
+Contract accepts:
 
-ZK proofs are validated **after** TBC security layers approve the session.
+Buyer
 
-Flow:
+BuyerZKProof {
+    bytes32 pkHash;
+    bytes32 nullifier;
+    uint256 amount;
+    uint256 timestamp;
+}
 
-1. TBC-SEC approves session  
-2. ZK proofs are evaluated  
-3. TBC emits settlement instruction  
-4. Escrow contract processes withdrawal/deposit  
+Seller
 
-Failure to validate ZK proofs MUST result in:
+SellerZKProof {
+    bytes32 pkHash;
+    bytes32 nullifier;
+    uint256 timestamp;
+    bytes32 orderHash;
+}
 
-REJECT: ZK_INVALID_PROOF
+These are not SNARK proofs —
+they are the public input field outputs of TBC’s ZK verification layer.
 
-—
+⸻
 
-# 12. Integration with CoreProver-Escrow-00
+13. Updated Security Considerations (Corrected)
+	•	Proofs MUST NOT go on-chain.
+	•	Contract MUST rely on nullifiers + timestamps, not proofs.
+	•	TBC MUST enforce ZK verification.
+	•	Extensions MUST generate proofs.
+	•	ReceiptVault MUST not reveal witness.
+	•	Nullifiers MUST be collision-resistant.
 
-Escrow contract MUST accept proof arguments:
+⸻
 
-deposit(amount, session_pubkey, zk_proof, zk_inputs)
-withdraw(order_id, fulfillment_hash, zk_proof_seller, zk_proof_merchant)
-
-Contracts MUST:
-
-- verify Groth16 proofs when required  
-- forward events to Receipt Vault  
-- mint Receipt NFTs after settlement  
-
-—
-
-# 13. Security Considerations
-
-- Proof hashes MUST be collision-resistant  
-- Witness data MUST never leave buyer/seller/merchant domain  
-- TBC MUST sandbox verifier failures  
-- NFT metadata MUST NOT reveal private data  
-- Loss of off-chain proof archives MUST NOT break verification  
-- Session-wallet usage MUST always be encouraged over root wallets  
-
-—
-
-# Appendix A — Diagrams
-
-## A.1 ZK Layer Position in Architecture
-
-TBC-00
-|
-TGP-00
-|
-TBC-SEC-00
-|
-CoreProver-ZK-00   <— this document
-|
-CoreProver-Escrow-00
-|
-Receipt Vault / NFTs
-
-## A.2 High-Level ZK Flow
-
-User → TBC → ZK-Verify → TGP → CoreProver → Receipt NFT
-
-## A.3 Proof Lifecycle
-
-       Buyer                 Seller                 Merchant
-         |                      |                       |
-     ZKB-01                  ZKS-01                  ZKM-01
-         |                      |                       |
-         +——————-———→ TBC Verifier ←——————————————-—————+
-                            |
-                      Settlement OK
-                            |
-               CoreProver Escrow Contract
-                            |
-                    Receipt NFT Minted
-                            |
-                Proof Hashes Stored On-Chain
-
-—
-
-# END OF FILE
-
+END OF DOCUMENT

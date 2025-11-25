@@ -1,60 +1,64 @@
-📘 TGP-CP-00 — Transaction Gateway Protocol: Client Profile
+📘 TGP-CP-00 v1.0 — Transaction Gateway Protocol: Client Profile
 
-Version: 0.1 Draft
+Version: 1.0 Draft
 Status: Draft (internal)
 Author: Ledger of Earth
-Scope: Specifies how the TGP Client interacts with x402, the TBC, wallets, and on-chain payment profile contracts.
-Purpose: Establish a standard execution model for TGP-aware clients such as browser extensions, headless agents, embedded runtimes, or wallet-native modules.
+Scope: Defines the required behavior of TGP Clients interacting with payment gateways, wallets, and settlement engines under TGP-00 v3.2.
+Audience: Browser extension developers, wallet-module authors, embedded agents, automated runtimes.
 
 ⸻
 
 0. Overview
 
-The TGP Client is the runtime component responsible for negotiating and executing transactions through a Transaction Border Controller (TBC) using the Transaction Gateway Protocol.
+A TGP Client is any runtime that interprets payment triggers, constructs
+QUERY messages, executes gateway-issued Economic Envelopes, and submits signed transactions to a payment gateway or a blockchain.
 
-The TGP Client:
-	•	interprets x402 payment_required
-	•	constructs and sends TGP QUERY messages
-	•	receives and obeys TGP ACK responses
-	•	constructs blockchain transactions exactly as instructed
-	•	forwards them to a wallet for signing
-	•	routes signed transactions to RPC or TBC relay endpoints
-	•	manages multi-verb escrow sequences
-	•	maintains TGP session state
+The TGP Client sits between:
+	•	Merchant / User environment (402-trigger, x402 metadata, Direct Pay)
+	•	Gateway (TBC or any verification node)
+	•	Wallet (standard EIP-1193 signer)
+	•	Settlement Engine (on-chain contracts observed by the gateway)
 
-The TGP Client does not generate keys, modify wallets, or replace signing engines.
+A compliant Client:
+	•	constructs QUERY messages according to TGP-00
+	•	validates and obeys ACK messages
+	•	forwards executable transactions to a wallet unchanged
+	•	routes signed transactions as directed by the gateway
+	•	listens for terminal SETTLE messages
+	•	maintains ephemeral session context locally (never in Gateway)
+
+The Client does not generate keys, modify wallets, or bypass gateway
+authorization.
 
 ⸻
 
-1. Responsibilities
+1. Client Responsibilities
 
 A compliant TGP Client MUST:
-	1.	Detect and parse x402 payment_required messages
-	2.	Construct a TGP QUERY to a configured TBC endpoint
-	3.	Validate TGP ACK responses
-	4.	Construct transactions verbatim from ACK data
-	5.	Forward the transaction to a wallet for signing (EIP-1193 or equivalent)
-	6.	Route the signed transaction per ACK routing rules
-	7.	Loop multi-verb escrow flows (commit → accept → fulfill → claim)
-	8.	Track per-session state (locally)
-	9.	Expose user-visible confirmation dialogs when required
+	1.	Detect payment triggers (HTTP 402, x402, Direct Pay, agent intent).
+	2.	Construct a well-formed QUERY.
+	3.	Include optional routing metadata if needed.
+	4.	Validate ACK messages.
+	5.	Construct transactions verbatim from ACK.tx.
+	6.	Forward unsigned transactions to a wallet for approval.
+	7.	Route signed transactions according to ACK.routing.
+	8.	Continue multi-verb flows until completion.
+	9.	Receive and process terminal SETTLE messages.
+	10.	Maintain minimal local session state (session_token, timestamps).
 
-A compliant TGP Client MUST NOT:
+A Client MUST NOT:
 	•	generate private keys
-	•	read seed phrases
-	•	intercept wallet popups
-	•	alter transaction calldata
-	•	override destination addresses
-	•	bypass TBC decision-making
+	•	intercept or modify wallet popups
+	•	alter Economic Envelopes
+	•	bypass gateway verification
 	•	broadcast unsigned transactions
+	•	embed transaction metadata into external logs
 
 A Client MAY:
-	•	render optional UI elements
-	•	keep local logs
-	•	allow “agent mode” automation with user authorization
-	•	expose optional session indicators
-	•	detect wallet presence flags
-	•	integrate awareness of presence API (TGP-EX)
+	•	render optional UI (“Protection Active”)
+	•	expose a visible indicator of TGP activity
+	•	allow “agent mode” automation with explicit user authorization
+	•	keep local, non-sensitive logs
 
 ⸻
 
@@ -62,213 +66,271 @@ A Client MAY:
 
 A TGP Client MUST activate when one of the following occurs:
 
-2.1 x402 “payment_required” Event
+2.1 HTTP 402 “Payment Required” (Canonical)
 
-Received from:
-	•	a website/dApp
-	•	an AI agent
-	•	a merchant API
-	•	local application code
+Detected from:
+	•	a merchant website
+	•	an API-triggered checkout
+	•	a native application
 
-2.2 Explicit User Command
+The Client extracts the payment profile and constructs a QUERY.
 
-User initiates a payment through a dApp or agent UI.
+2.2 x402 Message (Optional Alternative)
 
-2.3 Escrow Continuation
+The Client MAY treat x402 metadata as a payment trigger if present, but HTTP 402
+remains the canonical mechanism.
 
-Returned ACK specifies a next verb requiring additional transactions.
+2.3 Explicit User Command (Direct Pay)
 
-⸻
+User manually enters:
+	•	amount
+	•	merchant URL
+	•	or scans QR to obtain payment profile
 
-3. TGP QUERY (Client → TBC)
+The Client constructs a QUERY identically to merchant-initiated flows.
 
-A TGP Client MUST send a QUERY message to the TBC over HTTPS:
+2.4 Escrow Continuation
 
-{
-  "tgp_version": "0.1",
-  "session_id": "<uuid-or-null>",
-  "buyer_address": "<0x...>",
-  "payment_profile": "<0xContract>",
-  "chain_id": 369, 
-  "amount": "1000000000000000000",
-  "intent": { "verb": "commit" },
-  "metadata": {
-      "x402": {...}
-  }
-}
-
-Required fields:
-
-Field	Description
-session_id	Null on first QUERY; TBC returns a new session if needed
-buyer_address	Wallet address being used
-payment_profile	Settlement gateway / escrow contract
-chain_id	Target chain
-amount	Proposed payment amount
-intent.verb	Requested action: commit, pay, quote, etc.
-metadata	x402 contents or merchant-provided fields
-
-The Client MUST NOT include private keys or wallet secrets in the QUERY.
+If ACK.status = “offer” or a multi-verb flow is in progress, the Client MUST
+issue additional QUERY messages as required.
 
 ⸻
 
-4. TGP ACK (TBC → Client)
+3. QUERY Construction (Client → Gateway)
 
-A TGP Client MUST be able to parse and obey:
+The Client MUST construct a QUERY that conforms to TGP-00 v3.2.
+A minimal QUERY:
 
 {
-  "status": "allow",
-  "session_id": "abcd-1234",
-  "next_verb": "commit",
-  "tx": {
-    "to": "0xPaymentProfileContract",
-    "data": "0xabcdef...",
-    "value": "1000000000000000000",
-    "chain_id": 369,
-    "gas_limit": null,
-    "gas_price": null
+  “type”: “QUERY”,
+  “tgp_version”: “3.2”,
+  “id”: “uuid”,
+  “session_token”: “<opaque-or-null>”,
+  “delegated_key”: “<public-key-or-null>”,
+  “scope”: { },
+
+  “transaction_area_id”: null,
+  “path”: [],
+  “next_gateway”: null,
+
+  “intent”: {
+    “verb”: “COMMIT”,
+    “party”: “BUYER”,
+    “mode”: “DIRECT”
   },
-  "routing": {
-    "mode": "direct",
-    "rpc_url": "https://rpc.pulsechain.com"
-  },
-  "timeouts": {
-    "fulfillment_window": 30000,
-    "session_expiry": 600000
-  },
-  "notes": "Commit authorized"
+
+  “payment_profile”: “0xContract”,
+  “amount”: “1000000”,
+  “chain_id”: 369,
+  “metadata”: { }
 }
 
-A Client MUST obey:
-	•	status (allow/deny/revise)
-	•	tx fields exactly as provided
-	•	routing directives
-	•	next_verb sequencing
+Normative Requirements
 
-A Client MUST NOT:
+The Client MUST:
+	•	include intent.verb
+	•	use the gateway endpoint configured by the user
+	•	use HTTPS only
+	•	include routing metadata only when required by the environment
+	•	include session_token and delegated_key when using delegated-session flows
+
+The Client MUST NOT:
+	•	include private keys
+	•	include wallet seeds
+	•	include signatures
+	•	embed sensitive metadata
+
+⸻
+
+4. ACK Handling
+
+A gateway responds with an ACK containing:
+	•	status = “offer” — preview, not executable
+	•	status = “allow” — executable Economic Envelope
+	•	status = “deny” — authorization refusal
+	•	status = “revise” — missing or incorrect fields
+
+{
+  “type”: “ACK”,
+  “status”: “allow”,
+  “id”: “uuid”,
+  “intent”: { “verb”: “COMMIT” },
+  “tx”: {
+    “to”: “0xPaymentProfile”,
+    “value”: “1000000”,
+    “data”: “0x...”,
+    “chain_id”: 369,
+    “gas_limit”: 200000
+  },
+  “routing”: {
+    “mode”: “direct”,
+    “rpc_url”: “https://rpc.example”
+  },
+  “expires_at”: “2025-11-18T15:00:00Z”
+}
+
+The Client MUST:
+	•	obey status
+	•	obey routing instructions
+	•	obey expires_at
+	•	treat offer as informational only
+	•	treat deny as final
+	•	require a new QUERY for any parameter changes
+
+The Client MUST NOT:
 	•	modify calldata
 	•	override chain_id
-	•	alter the recipient address
-	•	ignore deny or revise statuses
+	•	change destination address
+	•	retry automatically after a denial
 
 ⸻
 
 5. Transaction Construction
 
-The Client MUST construct the transaction exactly matching the ACK:
-	•	to
-	•	value
-	•	data
-	•	chain_id
+When ACK.status = “allow”, the Client MUST:
+	•	construct a transaction identical to ACK.tx
+	•	include no additional calldata
+	•	include no additional fields
+	•	not adjust the gas parameters unless explicitly provided
 
-No field may be changed by the Client.
-
-Any modifications MUST trigger a new QUERY.
+Any deviation MUST cause the Client to generate a new QUERY.
 
 ⸻
 
 6. Wallet Interaction (Signing Layer)
 
-A TGP Client MUST:
-	•	call the wallet using standard APIs (e.g., ethereum.request({ method: 'eth_sendTransaction', params: [...] }))
-	•	display native wallet approval popup
-	•	not bypass user approval
+A Client MUST:
+	•	invoke wallet APIs using standard methods:
 
-A Wallet:
-	•	does not need TGP awareness
-	•	must only sign what it sees
-	•	remains a blind signer
+ethereum.request({ method: “eth_sendTransaction”, params: [ tx ] })
+
+
+	•	display the wallet’s native confirmation UI
+	•	wait for explicit user approval
+	•	treat the wallet as a blind signer
+
+A Client MUST NOT:
+	•	suppress wallet confirmation
+	•	modify wallet provider objects
+	•	intercept keystrokes, seeds, or popup windows
+
+Wallets remain completely unaware of TGP.
 
 ⸻
 
 7. Routing Signed Transactions
 
-After signing, the Client MUST route the transaction according to the ACK:
+The Client MUST route signed transactions exactly as specified in ACK.routing.
 
 7.1 Direct Mode
 
-Send signed tx to the provided RPC endpoint.
+Send the signed transaction directly to the RPC endpoint:
+
+POST <rpc_url>
 
 7.2 Relay Mode
 
-Send signed tx back to the TBC:
+Send a relay payload to the Gateway:
 
 {
-  "session_id": "...",
-  "signed_tx": "0x..."
+  “id”: “uuid”,
+  “signed_tx”: “0x...”
 }
 
-TBC relays to RPC.
+The Gateway handles RPC submission.
 
 ⸻
 
-8. Escrow Verb Sequencing
+8. Verb Sequencing (Multi-Step Escrow)
 
-If next_verb is not final:
-	•	Client MUST generate a new QUERY after the transaction reaches its state transition
-	•	TBC returns next verb
-	•	Loop continues until claim or success status
+For multi-verb flows (COMMIT → ACCEPT → CLAIM → etc.):
+	1.	Client sends initial QUERY.
+	2.	Gateway returns ACK(status=“offer”).
+	3.	Client sends upgraded QUERY if needed.
+	4.	Gateway returns ACK(status=“allow”).
+	5.	Client signs & routes the transaction.
+	6.	Upon state transition, Client MUST issue the next QUERY.
 
-Example sequence:
-
-commit → accept → fulfill → verify → claim
-
+This continues until a final verb (e.g., CLAIM, WITHDRAW) completes.
 
 ⸻
 
-9. Session Tracking
+9. Settlement Handling (SETTLE Messages)
 
-Client MUST maintain:
-	•	session_id
-	•	timestamps
-	•	whether TBC is reachable
-	•	last ACK status
-	•	next required verb
+After an authorized transaction is submitted, the Gateway observes the Settlement
+Engine and emits a terminal SETTLE message:
 
-Client MUST NOT store:
+{
+  “type”: “SETTLE”,
+  “id”: “uuid”,
+  “result”: {
+    “final_status”: “claimed”,
+    “escrow_id”: “0xEscrow”
+  },
+  “timestamp”: “2025-11-18T15:00:05Z”
+}
+
+A Client MUST:
+	•	listen for SETTLE
+	•	finalize the user-visible transaction record
+	•	not expect further messages
+	•	not send additional QUERY messages for that lifecycle
+
+⸻
+
+10. Client State Tracking
+
+Clients MUST maintain:
+	•	session_token (ephemeral)
+	•	delegated_key (optional)
+	•	local timestamps
+	•	last ACK
+	•	pending verb state
+	•	gateway reachability information
+
+Clients MUST NOT persist:
 	•	private keys
-	•	wallet seed words
-	•	sensitive chain metadata
+	•	seeds
+	•	RPC credentials
+	•	gateway internal metadata
+	•	wallet-specific secrets
 
-⸻
-
-10. Optional User Interface Elements
-
-A Client MAY show:
-	•	session status
-	•	current verb
-	•	TBC reachability
--* protection active* indicator
-
-A Client MUST NOT misrepresent TGP guarantees or expose internal TBC routing data.
+Session state is local-only and ephemeral.
 
 ⸻
 
 11. Security & Privacy Requirements
 
-The Client MUST:
-	•	use HTTPS for all TBC communications
-	•	validate TBC certificates
+A compliant TGP Client MUST:
+	•	use HTTPS for all gateway communications
+	•	validate certificates
 	•	protect against replay attacks
-	•	never store sensitive wallet data
+	•	ensure SETTLE messages match known id values
 	•	never broadcast unsigned transactions
+	•	never share transaction metadata externally
 
-The Client MUST NOT:
-	•	attempt to modify wallet state
-	•	override wallet provider objects
-	•	inject code into wallet popups
-	•	leak transaction metadata to third-party servers
+A Client MUST NOT:
+	•	modify wallet state
+	•	override wallet security
+	•	leak transaction metadata
+	•	attempt to inspect sensitive DOM areas (in extension contexts)
 
 ⸻
 
 12. Compliance Tests
 
-A TGP Client MUST pass:
-	1.	QUERY/ACK handshake test
-	2.	Transaction construction correctness test
-	3.	Wallet interaction test
-	4.	Routing correctness test
-	5.	Escrow sequencing test
-	6.	Timeout and error recovery test
+A conforming Client MUST pass:
+	1.	QUERY Construction Test
+	2.	ACK Validation Test
+	3.	Economic Envelope Execution Test
+	4.	Wallet Interaction Test
+	5.	Routing Correctness Test
+	6.	Escrow Verb Sequencing Test
+	7.	SETTLE Handling Test
+	8.	Security Sandbox Test
 
-Passing these tests makes the Client TGP-CP-00 compliant.
+Successful completion indicates the implementation is TGP-CP-00 compliant.
+
+⸻
+
+End of TGP-CP-00 v1.0.

@@ -196,16 +196,3 @@ Policy-first architecture
 
 Contract settlement logic remains immutable.
 Policy enforcement is off-chain and adjustable without contract redeployments.
-
-⸻
-
-✔ This version is suitable for a technical prospect.
-
-If you’d like, I can also produce:
-	•	A merchant-specific technical addendum
-	•	A buyer privacy assurance document
-	•	A security architecture whitepaper
-	•	A TBC–merchant integration guide
-	•	A diagram-focused version for CTO slides
-
-Just say the word.

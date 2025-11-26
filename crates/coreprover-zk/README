@@ -1,7 +1,0 @@
-# coreprover-zk
-
-Zero-knowledge proof circuits for CoreProver.
-
-## Circuits
-
-- `ownership.circom` - Receipt ownership proof

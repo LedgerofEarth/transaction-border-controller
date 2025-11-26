@@ -1,75 +1,93 @@
+//! tgp_error_handlers.rs -- TGP-00 v3.2
+//! Stateless ERROR passthrough handler
+//! -----------------------------------
+//! In TGP v3.2, inbound ERROR messages:
+//!   • MUST NOT alter gateway state
+//!   • MUST NOT create or modify sessions
+//!   • MUST be logged
+//!   • MUST be echoed back to caller
+//! 
+//! This module implements that behavior.
+
 use anyhow::Result;
 
 use tbc_core::{
     codec_tx::TGPMetadata,
     protocol::{ErrorMessage, TGPMessage},
-    tgp::state::TGPSession,
 };
 
-// Macros exported at crate root
-use crate::{log_error, log_info};
+// Logging utilities from crate
+use crate::logging::{log_handler, log_err, log_info};
 
-// Logging functions
-use crate::logging::{log_handler, log_err};
 
-/// Handle inbound ERROR message → echo + logging
+/// -----------------------------------------------------------------------
+/// ERROR Handler -- Stateless Passthrough
+/// -----------------------------------------------------------------------
 pub async fn handle_inbound_error(
-    _meta: &TGPMetadata,
-    session: &TGPSession,
-    e: ErrorMessage,
+    meta: &TGPMetadata,
+    err: ErrorMessage,
 ) -> Result<TGPMessage>
 {
     log_handler("ERROR");
 
-    // ------------------------------------------------------
-    // 1. Structural validation (defensive)
-    // ------------------------------------------------------
-    if let Err(v) = e.validate() {
-        log_error!(
+    // -------------------------------------------------------------------
+    // 1. Validate ErrorMessage (defensive)
+    // -------------------------------------------------------------------
+    if let Err(v) = err.validate() {
+        log_err(&err);
+        log_info!(
             target: "tgp.error",
             {
-                "id": e.id.clone(),
+                "id": err.id.clone(),
+                "correlation": err.correlation_id.clone(),
                 "validation_error": v,
-                "correlation": e.correlation_id
             },
             "Inbound ERROR failed structural validation"
         );
 
-        return Ok(TGPMessage::Error(e));
+        // Still echo back; TGP never suppresses an inbound ERROR.
+        return Ok(TGPMessage::Error(err));
     }
 
-    // ------------------------------------------------------
-    // 2. Log ERROR metadata
-    // ------------------------------------------------------
-    log_err(&e);
+    // -------------------------------------------------------------------
+    // 2. Log inbound ERROR
+    // -------------------------------------------------------------------
+    log_err(&err);
 
     log_info!(
         target: "tgp.error",
         {
-            "id": e.id.clone(),
-            "code": e.code.clone(),
-            "correlation": e.correlation_id.clone()
+            "id": err.id.clone(),
+            "code": err.code.clone(),
+            "correlation": err.correlation_id.clone(),
+            "source_msg_id": meta.msg_id.clone(),
         },
-        "Inbound ERROR recorded"
+        "Inbound ERROR accepted"
     );
 
-    // ------------------------------------------------------
-    // 3. Optional correlation chain linking
-    // ------------------------------------------------------
-    if let Some(cid) = &e.correlation_id {
+    // -------------------------------------------------------------------
+    // NOTE: Under TGP v3.2, correlation IDs are purely informational.
+    // Gateways DO NOT:
+    //   • Lookup sessions
+    //   • Mutate any local state
+    //   • Imply transactional linkage
+    //
+    // Correlation is logged only for observability.
+    // -------------------------------------------------------------------
+
+    if let Some(cid) = &err.correlation_id {
         log_info!(
             target: "tgp.error",
             {
-                "id": e.id.clone(),
+                "id": err.id.clone(),
                 "correlation": cid,
-                "session_id": session.session_id.clone()
             },
-            "Correlation chain linked"
+            "Correlation observed"
         );
     }
 
-    // ------------------------------------------------------
-    // 4. Echo ERROR back
-    // ------------------------------------------------------
-    Ok(TGPMessage::Error(e))
+    // -------------------------------------------------------------------
+    // 3. Stateless passthrough
+    // -------------------------------------------------------------------
+    Ok(TGPMessage::Error(err))
 }

@@ -1,260 +1,196 @@
-//! # TGP Codec + Transport Layer (codec_tx.rs)
+//! # codec_tx.rs -- TGP-00 v3.2 Transport Codec
 //!
-//! Pure JSON codec + transport metadata for TGP-00.
-//! No policy, no MGMT, no session logic, no chrono, no platform-unsafe deps.
+//! Responsibilities:
+//!   • Raw JSON parsing
+//!   • Message-type classification
+//!   • Structural validation
+//!   • Replay metadata extraction
+//!
+//! Supported types per TGP-00 v3.2:
+//!   • QUERY
+//!   • ACK
+//!   • ERROR
+//!   • SETTLE
+//!
+//! Forbidden:
+//!   • OFFER (removed in v3.2)
 
-use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use anyhow::{Result, anyhow};
 use uuid::Uuid;
 
-use crate::{
-    protocol::{TGPMessage, ErrorMessage, make_protocol_error},
+use crate::protocol::{
+    TGPMessage,
+    QueryMessage,
+    AckMessage, AckStatus,
+    ErrorMessage,
+    SettleMessage,
 };
 
-// ================================================================================================
-// Timestamp Helper (WASM-safe, no chrono)
-// ================================================================================================
-
-/// Deterministic, portable millisecond timestamp.
-///
-/// Avoids `chrono` because tbc-core must run in WASM, MCP agents,
-/// gateways, and minimal embedded validators.
-///
-/// Not strictly RFC3339; it's metadata only.
-fn now_millis() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis() as u64
-}
-
-// ================================================================================================
-// Message Envelope (Controller-side framing)
-// ================================================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MessageEnvelope<T> {
-    pub session_id: Option<String>,
-    pub correlation_id: Option<String>,
-    pub received_at: u64,
-    pub body: T,
-}
-
-impl<T> MessageEnvelope<T> {
-    pub fn new(session_id: Option<String>, correlation_id: Option<String>, body: T) -> Self {
-        Self {
-            session_id,
-            correlation_id,
-            received_at: now_millis(),
-            body,
-        }
-    }
-}
-
-// ================================================================================================
-// Metadata (transport header reflection)
-// ================================================================================================
-
+/// Metadata extracted during parse/classify stage.
 #[derive(Debug, Clone)]
 pub struct TGPMetadata {
-    pub msg_type: TGPMessageType,
     pub msg_id: String,
+    pub msg_type: String,
     pub correlation_id: Option<String>,
-    pub origin: String,
-    pub raw_json: String,
 }
 
-#[derive(Debug, Clone)]
-pub enum TGPMessageType {
-    Query,
-    Offer,
-    Settle,
-    Error,
-}
-
-impl TGPMetadata {
-    pub fn from_message(raw_json: String, message: &TGPMessage) -> Self {
-        let msg_type = match message {
-            TGPMessage::Query(_)  => TGPMessageType::Query,
-            TGPMessage::Offer(_)  => TGPMessageType::Offer,
-            TGPMessage::Settle(_) => TGPMessageType::Settle,
-            TGPMessage::Error(_)  => TGPMessageType::Error,
-        };
-
-        let correlation_id = match message {
-            TGPMessage::Query(_) => None,
-            TGPMessage::Offer(o) => Some(o.query_id.clone()),
-            TGPMessage::Settle(s) => Some(s.query_or_offer_id.clone()),
-            TGPMessage::Error(e) => e.correlation_id.clone(),
-        };
-
-        Self {
-            msg_type,
-            msg_id: message.id().to_string(),
-            correlation_id,
-            origin: "unknown".into(),
-            raw_json,
-        }
-    }
-}
-
-// ================================================================================================
-// JSON Parsing / Encoding Layer (pure SIP-style codec)
-// ================================================================================================
-
-pub fn parse_message(json: &str) -> Result<TGPMessage, String> {
-    serde_json::from_str::<TGPMessage>(json)
-        .map_err(|e| format!("Failed to parse TGPMessage: {}", e))
-}
-
-pub fn classify_message(json: &str) -> Result<(TGPMetadata, TGPMessage), String> {
-    let msg = parse_message(json)?;
-    let metadata = TGPMetadata::from_message(json.to_string(), &msg);
-    Ok((metadata, msg))
-}
-
-pub fn encode_message(message: &TGPMessage) -> Result<String, String> {
-    serde_json::to_string(message)
-        .map_err(|e| format!("Failed to encode TGPMessage: {}", e))
-}
-
-// ================================================================================================
-// Replay Protection (Optimized with HashSet + VecDeque)
-// ================================================================================================
-
-pub trait ReplayProtector: Send + Sync {
+/// Replay protection trait.
+pub trait ReplayProtector {
     fn check_or_insert(&self, msg_id: &str) -> bool;
 }
 
-use std::collections::{HashSet, VecDeque};
-use std::sync::RwLock;
-
-/// In-memory replay cache with O(1) lookups and O(1) evictions.
-///
-/// Maintains a sliding window of recently seen message IDs using:
-///   - HashSet for O(1) replay detection
-///   - VecDeque for O(1) FIFO eviction (oldest-first)
-///
-/// Performance comparison:
-///   - Original (Vec):     O(n) lookup + O(n) eviction = ~8ms @ 8192 entries
-///   - This (HashSet+VecDeque): O(1) lookup + O(1) eviction = ~0.1ms
-///   - Improvement: 80x faster
-///
-/// Invariants:
-///   - `seen.len() == order.len()` always
-///   - `order.len() <= window + 1` (temporarily exceeds by 1 during insertion)
-///   - Oldest entry evicted first (FIFO)
-pub struct InMemoryReplayCache {
-    window: usize,
-    seen: RwLock<HashSet<String>>,
-    order: RwLock<VecDeque<String>>,
-}
-
-impl InMemoryReplayCache {
-    pub fn new(window: usize) -> Self {
-        Self {
-            window,
-            seen: RwLock::new(HashSet::with_capacity(window)),
-            order: RwLock::new(VecDeque::with_capacity(window)),
-        }
-    }
-}
-
-impl Default for InMemoryReplayCache {
-    fn default() -> Self {
-        Self::new(8192)
-    }
-}
+/// In-memory replay cache for dev/tests.
+#[derive(Default)]
+pub struct InMemoryReplayCache(std::sync::Mutex<std::collections::HashSet<String>>);
 
 impl ReplayProtector for InMemoryReplayCache {
-    /// Check if message ID was seen before, and insert if new.
-    ///
-    /// Returns:
-    ///   - `true` if message is NEW (not a replay)
-    ///   - `false` if message is a REPLAY (already seen)
     fn check_or_insert(&self, msg_id: &str) -> bool {
-        let mut seen = self.seen.write().unwrap();
-        let mut order = self.order.write().unwrap();
-        
-        // Check for replay (O(1) HashSet lookup)
-        if seen.contains(msg_id) {
-            return false; // Replay detected
-        }
-        
-        // Insert new ID (avoiding extra clone)
-        let id_string = msg_id.to_string();
-        order.push_back(id_string.clone());  // O(1) - append to back
-        seen.insert(id_string);               // O(1) - HashSet insert
-        
-        // Evict oldest if window exceeded (O(1) - pop from front)
-        if order.len() > self.window {
-            if let Some(oldest) = order.pop_front() {
-                seen.remove(&oldest);
-            }
-        }
-        
-        true // New message accepted
+        let mut guard = self.0.lock().unwrap();
+        guard.insert(msg_id.to_string())
     }
 }
 
-// ================================================================================================
-// Error Builders
-// ================================================================================================
+/// ===========================================================================
+/// classify_message(raw_json)
+/// → (TGPMetadata, TGPMessage)
+/// ===========================================================================
+pub fn classify_message(raw: &str) -> Result<(TGPMetadata, TGPMessage)> {
+    let v: Value = serde_json::from_str(raw)
+        .map_err(|e| anyhow!("JSON parse error: {}", e))?;
 
-pub fn error_from_validation(
-    metadata: &TGPMetadata,
-    reason: impl Into<String>,
-) -> ErrorMessage {
-    make_protocol_error(
-        metadata.correlation_id.clone(),
-        "POLICY_VIOLATION",
-        reason.into(),
-    )
+    // -----------------------------------------------------------------------
+    // 1. Extract "type"
+    // -----------------------------------------------------------------------
+    let typ = v.get("type")
+        .and_then(|x| x.as_str())
+        .ok_or_else(|| anyhow!("Missing required field: type"))?
+        .to_uppercase();
+
+    // -----------------------------------------------------------------------
+    // 2. Extract or generate message ID
+    // -----------------------------------------------------------------------
+    let msg_id = match v.get("id").and_then(|x| x.as_str()) {
+        Some(id) => id.to_string(),
+        None => Uuid::new_v4().to_string(),
+    };
+
+    let correlation_id = v.get("correlation_id")
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string());
+
+    let metadata = TGPMetadata {
+        msg_id: msg_id.clone(),
+        msg_type: typ.clone(),
+        correlation_id,
+    };
+
+    // -----------------------------------------------------------------------
+    // 3. Dispatch by type
+    // -----------------------------------------------------------------------
+    let tgp_msg = match typ.as_str() {
+
+        // ---------------------------------------------------------------
+        // QUERY
+        // ---------------------------------------------------------------
+        "QUERY" => {
+            let q: QueryMessage = serde_json::from_value(v.clone())
+                .map_err(|e| anyhow!("Invalid QUERY: {}", e))?;
+            TGPMessage::Query(q)
+        }
+
+        // ---------------------------------------------------------------
+        // ACK  (new in v3.2, replaces OFFER)
+        // ---------------------------------------------------------------
+        "ACK" => {
+            let status = v.get("status")
+                .and_then(|s| s.as_str())
+                .ok_or_else(|| anyhow!("ACK missing `status` field"))?
+                .to_lowercase();
+
+            let status_enum = match status.as_str() {
+                "offer" =>  AckStatus::Offer,
+                "allow" =>  AckStatus::Allow,
+                "deny"  =>  AckStatus::Deny,
+                "revise"=>  AckStatus::Revise,
+                _ => return Err(anyhow!("Unknown ACK.status: {}", status)),
+            };
+
+            // Deserialize full ACK body
+            let mut ack: AckMessage = serde_json::from_value(v.clone())
+                .map_err(|e| anyhow!("Invalid ACK: {}", e))?;
+
+            ack.status = status_enum;
+            TGPMessage::Ack(ack)
+        }
+
+        // ---------------------------------------------------------------
+        // SETTLE
+        // ---------------------------------------------------------------
+        "SETTLE" => {
+            let s: SettleMessage = serde_json::from_value(v.clone())
+                .map_err(|e| anyhow!("Invalid SETTLE: {}", e))?;
+            TGPMessage::Settle(s)
+        }
+
+        // ---------------------------------------------------------------
+        // ERROR
+        // ---------------------------------------------------------------
+        "ERROR" => {
+            let e: ErrorMessage = serde_json::from_value(v.clone())
+                .map_err(|e| anyhow!("Invalid ERROR: {}", e))?;
+            TGPMessage::Error(e)
+        }
+
+        // ---------------------------------------------------------------
+        // Unsupported types
+        // ---------------------------------------------------------------
+        other => {
+            return Err(anyhow!("Unsupported TGP message type: {}", other));
+        }
+    };
+
+    Ok((metadata, tgp_msg))
 }
 
-pub fn error_from_exception(msg: impl Into<String>) -> ErrorMessage {
-    make_protocol_error(None, "INTERNAL_ERROR", msg.into())
-}
-
-// ================================================================================================
-// Validation
-// ================================================================================================
-
-#[derive(Debug)]
+/// ===========================================================================
+/// validate_and_classify_message(metadata, message)
+/// Simplified for v3.2 -- each message performs its own validate().
+/// ===========================================================================
 pub enum TGPValidationResult {
     Accept,
     Reject(ErrorMessage),
 }
 
 pub fn validate_and_classify_message(
-    metadata: &TGPMetadata,
-    message: &TGPMessage,
+    meta: &TGPMetadata,
+    msg: &TGPMessage,
 ) -> TGPValidationResult {
 
-    if let Err(e) = message.validate() {
-        return TGPValidationResult::Reject(error_from_validation(metadata, e));
-    }
+    let res = match msg {
+        TGPMessage::Query(m)  => m.validate(),
+        TGPMessage::Ack(m)    => m.validate(),
+        TGPMessage::Settle(m) => m.validate(),
+        TGPMessage::Error(m)  => m.validate(),
+    };
 
-    TGPValidationResult::Accept
+    match res {
+        Ok(_) => TGPValidationResult::Accept,
+        Err(e) => {
+            let err = ErrorMessage::new(
+                meta.msg_id.clone(),
+                "INVALID_MESSAGE",
+                format!("{}", e)
+            );
+            TGPValidationResult::Reject(err)
+        }
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_replay_protection_performance() {
-        let cache = InMemoryReplayCache::new(8192);
-        let start = std::time::Instant::now();
-        
-        // Insert 10,000 unique IDs
-        for i in 0..10000 {
-            let id = format!("msg-{}", i);
-    }
-    
-    #[test]
-    fn test_replay_detection() {
-        let cache = InMemoryReplayCache::new(100);
-        
-    }
+/// ===========================================================================
+/// encode_message(msg)
+/// ===========================================================================
+pub fn encode_message(msg: &TGPMessage) -> Result<String> {
+    serde_json::to_string(msg)
+        .map_err(|e| anyhow!("encode error: {}", e))
 }

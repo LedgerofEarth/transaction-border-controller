@@ -9,7 +9,7 @@ Gateways and domains MAY substitute any compatible IProver implementation; CoreP
 
 ⸻
 
-E.2 Profile Identifier
+E.2 Profile Identifier         
 
 Field	Value
 ProverID	ESCROW_COMMITMENT_V0

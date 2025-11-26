@@ -1,378 +1,319 @@
-//! # TGP Protocol Definitions (Spec-Pure)
+//! TGP-00 v3.2 -- Integrated Runtime-Aware Protocol Engine
+//! ------------------------------------------------------
+//! This file contains:
+//!   • Canonical message definitions (spec-pure)
+//!   • Deterministic runtime validation
+//!   • Routing normalization
+//!   • ACK construction helpers (offer / allow / deny / revise)
+//!   • Terminal SETTLE message construction
+//!   • Protocol-compliant error builder
 //!
-//! **Destination:** `crates/tbc-core/src/tgp/protocols.rs`
-//!
-//! This module contains *only* the core Transaction Gateway Protocol (TGP-00)
-//! message definitions, semantic validation rules, and enumerations.
-//!
-//! ## Architectural Note (RFC 3261 Alignment)
-//!
-//! Following the SIP architecture from RFC 3261:
-//!
-//! - **Core protocol grammar** lives in the SIP spec (RFC 3261 §7, §20)
-//! - **Transaction/state logic** lives separately (RFC 3261 §17)
-//! - **Transport encode/decode** lives separately (RFC 3261 §18)
-//!
-//! TGP mirrors this separation:
-//!
-//! | SIP (RFC 3261) Section | Equivalent TGP Component |
-//! |------------------------|--------------------------|
-//! | Core message syntax (§7, §20) | `protocols.rs` (this file) |
-//! | Transaction layer (§17) | `state.rs` |
-//! | Transport/encoding (§18) | `codec_tx.rs` |
-//!
-//! Thus, no routing, envelope, metadata, codec, or session binding logic
-//! appears here. This file is deliberately "spec-pure."
+//! Mirrors SIP separation of concerns but includes runtime validation
+//! because TBC must produce deterministic ACKs and SETTLE events.
 
-use serde::{Deserialize, Serialize};
-use crate::tgp::types::{ZkProfile, EconomicEnvelope, SettleSource};
+use serde::{Serialize, Deserialize};
+use uuid::Uuid;
+
+use crate::tgp::types::{EconomicEnvelope};
 use crate::tgp::validation::{
     validate_non_empty,
-    validate_positive_amount,
     validate_address,
-    validate_transaction_hash,
+    validate_positive_amount,
 };
 
-//
-// ============================================================================
-// TGPMessage Discriminated Union (§3.8)
-// ============================================================================
-//
+// -----------------------------------------------------------------------------
+// 0. Canonical Enumerations
+// -----------------------------------------------------------------------------
 
-/// TGP message discriminator (JSON `phase` tag).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "phase")]
-pub enum TGPMessage {
-    #[serde(rename = "QUERY")]
-    Query(QueryMessage),
-
-    #[serde(rename = "OFFER")]
-    Offer(OfferMessage),
-
-    #[serde(rename = "SETTLE")]
-    Settle(SettleMessage),
-
-    #[serde(rename = "ERROR")]
-    Error(ErrorMessage),
+#[serde(rename_all = "UPPERCASE")]
+pub enum TGPVerb {
+    COMMIT,
+    PAY,
+    CLAIM,
+    WITHDRAW,
+    QUOTE,
 }
 
-impl TGPMessage {
-    /// Get the canonical message ID, required across all phases.
-    pub fn id(&self) -> &str {
-        match self {
-            TGPMessage::Query(m) => &m.id,
-            TGPMessage::Offer(m) => &m.id,
-            TGPMessage::Settle(m) => &m.id,
-            TGPMessage::Error(m) => &m.id,
-        }
-    }
-
-    /// Validate the underlying message (semantic rules).
-    pub fn validate(&self) -> Result<(), String> {
-        match self {
-            TGPMessage::Query(m) => m.validate(),
-            TGPMessage::Offer(m) => m.validate(),
-            TGPMessage::Settle(m) => m.validate(),
-            TGPMessage::Error(m) => m.validate(),
-        }
-    }
-
-    /// Convenience: "QUERY", "OFFER", "SETTLE", "ERROR".
-    pub fn phase(&self) -> &str {
-        match self {
-            TGPMessage::Query(_) => "QUERY",
-            TGPMessage::Offer(_) => "OFFER",
-            TGPMessage::Settle(_) => "SETTLE",
-            TGPMessage::Error(_) => "ERROR",
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum TGPParty {
+    BUYER,
+    SELLER,
 }
 
-//
-// ============================================================================
-// QUERY Message (§3.1)
-// ============================================================================
-//
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TGPMODE {
+    DIRECT,
+    SHIELDED,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AckStatus {
+    /// Preview: not executable
+    Offer,
+    /// Executable envelope included
+    Allow,
+    /// Rejected
+    Deny,
+    /// Needs modification
+    Revise,
+}
+
+// -----------------------------------------------------------------------------
+// 1. Intent Structure
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Intent {
+    pub verb: TGPVerb,
+    pub party: TGPParty,
+    pub mode: TGPMODE,
+}
+
+// -----------------------------------------------------------------------------
+// 2. Routing Metadata
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RoutingMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_area_id: Option<String>,
+
+    #[serde(default)]
+    pub path: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_gateway: Option<String>,
+}
+
+// -----------------------------------------------------------------------------
+// 3. QUERY -- Transaction Intent
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct QueryMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+
+    pub tgp_version: String,
     pub id: String,
-    pub from: String,
-    pub to: String,
-    pub asset: String,
-    pub amount: u64,
 
-    pub escrow_from_402: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub escrow_contract_from_402: Option<String>,
+    pub session_token: Option<String>,
 
-    pub zk_profile: ZkProfile,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delegated_key: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<serde_json::Value>,
+
+    #[serde(default)]
+    pub routing: RoutingMetadata,
+
+    pub intent: Intent,
+
+    pub payment_profile: String,
+    pub amount: u64,
+    pub chain_id: u64,
+
+    #[serde(default)]
+    pub metadata: serde_json::Value,
 }
 
 impl QueryMessage {
     pub fn validate(&self) -> Result<(), String> {
+        if self.msg_type != "QUERY" {
+            return Err("QUERY.type must equal \"QUERY\"".into());
+        }
+        if self.tgp_version != "3.2" {
+            return Err("Unsupported TGP version (must be 3.2)".into());
+        }
+
         validate_non_empty(&self.id, "id")?;
-        validate_non_empty(&self.from, "from")?;
-        validate_non_empty(&self.to, "to")?;
-        validate_non_empty(&self.asset, "asset")?;
+        validate_address(&self.payment_profile, "payment_profile")?;
         validate_positive_amount(self.amount, "amount")?;
 
-        if let Some(ref addr) = self.escrow_contract_from_402 {
-            validate_address(addr, "escrow_contract_from_402")?;
-        }
-
         Ok(())
     }
 
-    pub fn new(
-        id: impl Into<String>,
-        from: impl Into<String>,
-        to: impl Into<String>,
-        asset: impl Into<String>,
-        amount: u64,
-        zk_profile: ZkProfile,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            from: from.into(),
-            to: to.into(),
-            asset: asset.into(),
-            amount,
-            escrow_from_402: false,
-            escrow_contract_from_402: None,
-            zk_profile,
+    /// Normalizes routing.path by appending TAID if missing.
+    pub fn normalize_routing(&mut self) {
+        if let Some(ref taid) = self.routing.transaction_area_id {
+            if self.routing.path.is_empty() {
+                self.routing.path = vec![taid.clone()];
+            } else if self.routing.path.last() != Some(taid) {
+                self.routing.path.push(taid.clone());
+            }
         }
     }
 }
 
-//
-// ============================================================================
-// OFFER Message (§3.2)
-// ============================================================================
-//
+// -----------------------------------------------------------------------------
+// 4. ACK -- Deterministic Gateway Response
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct OfferMessage {
+pub struct AckMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+
+    pub status: AckStatus,
     pub id: String,
-    pub query_id: String,
-    pub asset: String,
-    pub amount: u64,
+
+    pub intent: Intent,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub coreprover_contract: Option<String>,
+    pub routing: Option<RoutingMetadata>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
+    pub tx: Option<EconomicEnvelope>,
 
-    pub zk_required: bool,
-    pub economic_envelope: EconomicEnvelope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
 }
 
-impl OfferMessage {
-    pub fn validate(&self) -> Result<(), String> {
-        // ----------------------------------------------------------
-        // 1. Minimal required fields (TGP-00 §3.2)
-        // ----------------------------------------------------------
-        validate_non_empty(&self.id, "id")?;
-        validate_non_empty(&self.query_id, "query_id")?;
-        validate_non_empty(&self.asset, "asset")?;
-        validate_positive_amount(self.amount, "amount")?;
+// ----------------------------
+// ACK Constructors
+// ----------------------------
 
-        // ----------------------------------------------------------
-        // 2. Optional coreprover_contract
-        // ----------------------------------------------------------
-        if let Some(ref addr) = self.coreprover_contract {
-            validate_address(addr, "coreprover_contract")?;
+impl AckMessage {
+    pub fn offer_for(query: &QueryMessage) -> Self {
+        AckMessage {
+            msg_type: "ACK".into(),
+            status: AckStatus::Offer,
+            id: query.id.clone(),
+            intent: query.intent.clone(),
+            routing: Some(query.routing.clone()),
+            tx: None,
+            expires_at: None,
+        }
+    }
+
+    pub fn allow_for(
+        query: &QueryMessage,
+        envelope: EconomicEnvelope,
+        expires_at: String,
+    ) -> Self {
+        AckMessage {
+            msg_type: "ACK".into(),
+            status: AckStatus::Allow,
+            id: query.id.clone(),
+            intent: query.intent.clone(),
+            routing: Some(query.routing.clone()),
+            tx: Some(envelope),
+            expires_at: Some(expires_at),
+        }
+    }
+
+    pub fn deny_for(query: &QueryMessage, reason: &str) -> Self {
+        AckMessage {
+            msg_type: "ACK".into(),
+            status: AckStatus::Deny,
+            id: query.id.clone(),
+            intent: query.intent.clone(),
+            routing: Some(query.routing.clone()),
+            tx: None,
+            expires_at: None,
+        }
+    }
+
+    pub fn revise_for(query: &QueryMessage, reason: &str) -> Self {
+        AckMessage {
+            msg_type: "ACK".into(),
+            status: AckStatus::Revise,
+            id: query.id.clone(),
+            intent: query.intent.clone(),
+            routing: Some(query.routing.clone()),
+            tx: None,
+            expires_at: None,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.msg_type != "ACK" {
+            return Err("ACK.type must equal \"ACK\"".into());
         }
 
-        // ----------------------------------------------------------
-        // 3. OPTIONAL economic envelope
-        //
-        // Inbound OFFERs may contain an empty envelope:
-        //     { "max_fees_bps": 0, "expiry": null }
-        //
-        // Only validate when the envelope is *meaningful*:
-        //     - max_fees_bps > 0
-        //     - OR expiry is Some(_)
-        // ----------------------------------------------------------
-        let envelope_empty =
-            self.economic_envelope.max_fees_bps == 0 &&
-            self.economic_envelope.expiry.is_none();
+        if self.status == AckStatus::Allow && self.tx.is_none() {
+            return Err("ACK.status=allow requires tx".into());
+        }
 
-        if !envelope_empty {
-            self.economic_envelope.validate()?;
+        if self.status == AckStatus::Offer && self.tx.is_some() {
+            return Err("ACK.status=offer MUST NOT include tx".into());
         }
 
         Ok(())
     }
-        
-    pub fn new(
-        id: impl Into<String>,
-        query_id: impl Into<String>,
-        asset: impl Into<String>,
-        amount: u64,
-        zk_required: bool,
-        econ: EconomicEnvelope,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            query_id: query_id.into(),
-            asset: asset.into(),
-            amount,
-            coreprover_contract: None,
-            session_id: None,
-            zk_required,
-            economic_envelope: econ,
-        }
-    }
 }
 
-//
-// ============================================================================
-// SETTLE Message (§3.3)
-// ============================================================================
-//
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SettleMessage {
-    pub id: String,
-    pub query_or_offer_id: String,
-    pub success: bool,
-    pub source: SettleSource,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub layer8_tx: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<String>,
-}
-
-impl SettleMessage {
-    pub fn validate(&self) -> Result<(), String> {
-        validate_non_empty(&self.id, "id")?;
-        validate_non_empty(&self.query_or_offer_id, "query_or_offer_id")?;
-
-        if let Some(ref tx) = self.layer8_tx {
-            validate_transaction_hash(tx, "layer8_tx")?;
-        }
-
-        Ok(())
-    }
-
-    pub fn new(
-        id: impl Into<String>,
-        q_or_o: impl Into<String>,
-        success: bool,
-        source: SettleSource,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            query_or_offer_id: q_or_o.into(),
-            success,
-            source,
-            layer8_tx: None,
-            session_id: None,
-        }
-    }
-}
-
-//
-// ============================================================================
-// ERROR Message (§3.4)
-// ============================================================================
-//
+// -----------------------------------------------------------------------------
+// 5. ERROR -- Protocol Failure
+// -----------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ErrorMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+
     pub id: String,
     pub code: String,
+    pub layer_failed: u8,
     pub message: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub correlation_id: Option<String>,
 }
 
-impl ErrorMessage {
-    pub fn validate(&self) -> Result<(), String> {
-        validate_non_empty(&self.id, "id")?;
-        validate_non_empty(&self.code, "code")?;
-        validate_non_empty(&self.message, "message")?;
-        Ok(())
-    }
-
-    pub fn new(id: impl Into<String>, code: impl Into<String>, msg: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            code: code.into(),
-            message: msg.into(),
-            correlation_id: None,
-        }
-    }
-
-    pub fn with_correlation(
-        id: impl Into<String>,
-        code: impl Into<String>,
-        msg: impl Into<String>,
-        corr: impl Into<String>,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            code: code.into(),
-            message: msg.into(),
-            correlation_id: Some(corr.into()),
-        }
-    }
-}
-// ============================================================================
-// Protocol Error Construction Helper (§3.4)
-// ============================================================================
-//
-// This helper produces fully-formed, protocol-compliant ErrorMessage structs.
-//
-// It is used by:
-//   • codec_tx.rs   -- JSON parsing errors, replay detection, decoding failures
-//   • inbound router -- session lookup failures, handler dispatch failures
-//   • handlers/*    -- validation failures, policy violations, settlement failures
-//
-// Behavior:
-//   • Always generates a fresh UUIDv4 for the error ID
-//   • Automatically applies correlation_id when provided
-//   • Produces errors that pass ErrorMessage::validate()
-//   • Keeps ErrorMessage pure and deterministic
-//
-// This function is intentionally placed in protocol.rs so the codec, router,
-// and handler layers can depend on it without creating a circular dependency.
-
-use uuid::Uuid;
-
-/// Create a TGP protocol error with automatic UUID generation.
-///
-/// # Examples
-///
-//// ```
-/// use tbc_core::protocol::make_protocol_error;
-///
-/// let e = make_protocol_error(None, "ERR", "something went wrong");
-/// assert_eq!(e.code, "ERR");
-// ```
 pub fn make_protocol_error(
-    correlation_id: Option<String>,
+    layer: u8,
     code: impl Into<String>,
     message: impl Into<String>,
 ) -> ErrorMessage {
-    let error_id = Uuid::new_v4().to_string();
+    ErrorMessage {
+        msg_type: "ERROR".into(),
+        id: Uuid::new_v4().to_string(),
+        code: code.into(),
+        layer_failed: layer,
+        message: message.into(),
+    }
+}
 
-    match correlation_id {
-        Some(cid) => ErrorMessage::with_correlation(
-            error_id,
-            code.into(),
-            message.into(),
-            cid,
-        ),
-        None => ErrorMessage::new(
-            error_id,
-            code.into(),
-            message.into(),
-        ),
+// -----------------------------------------------------------------------------
+// 6. SETTLE -- Terminal State
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SettleResult {
+    pub final_status: String,
+    pub escrow_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SettleMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+
+    pub id: String,
+    pub result: SettleResult,
+
+    pub timestamp: String,
+}
+
+impl SettleMessage {
+    pub fn terminal(
+        id: impl Into<String>,
+        final_status: impl Into<String>,
+        escrow_id: impl Into<String>,
+        timestamp: impl Into<String>,
+    ) -> Self {
+        SettleMessage {
+            msg_type: "SETTLE".into(),
+            id: id.into(),
+            result: SettleResult {
+                final_status: final_status.into(),
+                escrow_id: escrow_id.into(),
+            },
+            timestamp: timestamp.into(),
+        }
     }
 }

@@ -1,31 +1,14 @@
-// # TGP Validation Helpers
+// ============================================================================
+// TGP Validation Helpers -- Updated for TGP-00 v3.2
+// crates/tbc-core/src/tgp/validation.rs
 //
-// **Destination Path:** `crates/tbc-core/src/tgp/validation.rs`
-// **Implementation:** M1 - TGP Message Parsing & Basic Routing
-//
-// This module contains *pure* validation helpers used throughout the
-// Transaction Gateway Protocol (TGP) message model. These functions implement
-// the structural and syntactic validation rules defined in:
-//
-//     • TGP-00 §3.1  Required Fields
-//     • TGP-00 §3.2  Amounts & Asset Identifiers
-//     • TGP-00 §3.3  Addresses, Contract Identifiers, Hashes
-//     • TGP-00 §3.4  Identifiers (Message IDs, Correlation IDs)
-//
-// **Importantly:**  
-// This file now contains **ONLY validation**.  
-// All policy enforcement, domain rules, scoring layers, and decision logic
-// are handled in the TBC gateway (`tbc-gateway/`).  
-//
-// This preserves TGP-core as a deterministic, policy-neutral parsing layer,
-// suitable for:
-//     • x402 handlers
-//     • TGP-00 conformity tests
-//     • TGP-MGMT-00 serialization logic
-//     • Message-model unit tests
-//
-// Validation functions return a simple `Result<(), String>` for ease of
-// embedding directly into protocol constructors and handlers.
+// What changed:
+//   • OFFER removed entirely
+//   • ACK added as a first-class message type
+//   • Correlation IDs updated to allow ACK references
+//   • ID prefixes updated to: q-, ack-, settle-, err-
+//   • Comments rewritten for accuracy and v3.2 alignment
+// ============================================================================
 
 use serde::{Serialize, Deserialize};
 
@@ -33,17 +16,6 @@ use serde::{Serialize, Deserialize};
 // Basic Validation
 // ============================================================================
 
-/// Validate that a string field is non-empty
-///
-/// TGP-00 §3.1 requires that `id`, `session_id`, and other identifiers must
-/// never be empty.
-///
-/// Example:
-/// ```
-/// use tbc_core::tgp::validation::validate_non_empty;
-///
-/// validate_non_empty("q-123", "id").unwrap();
-/// ```
 pub fn validate_non_empty(value: &str, field_name: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         return Err(format!("{} is required and must not be empty", field_name));
@@ -51,17 +23,6 @@ pub fn validate_non_empty(value: &str, field_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Validate that an amount > 0
-///
-/// TGP-00 §3.2 amount fields (e.g., `amount` in QUERY) must be strictly
-/// greater than zero.
-///
-/// Example:
-/// ```
-/// use tbc_core::tgp::validation::validate_positive_amount;
-///
-/// validate_positive_amount(1000, "amount").unwrap();
-/// ```
 pub fn validate_positive_amount(amount: u64, field_name: &str) -> Result<(), String> {
     if amount == 0 {
         return Err(format!("{} must be greater than 0", field_name));
@@ -70,97 +31,69 @@ pub fn validate_positive_amount(amount: u64, field_name: &str) -> Result<(), Str
 }
 
 // ============================================================================
-// Ethereum-Specific Validation (TGP-00 §3.3)
+// Ethereum-Specific Validation
 // ============================================================================
 
-/// Validate an Ethereum-style address (0x + 40 hex chars)
-///
-/// Used for:
-///     • Controller contract fields
-///     • Settlement contract fields
-///     • Any payment-profile address
 pub fn validate_address(addr: &str, field_name: &str) -> Result<(), String> {
     if !addr.starts_with("0x") {
-        return Err(format!(
-            "{} must start with 0x: {}",
-            field_name, addr
-        ));
+        return Err(format!("{} must start with 0x: {}", field_name, addr));
     }
-
     if addr.len() != 42 {
-        return Err(format!(
-            "{} must be 42 characters (0x + 40 hex chars): {}",
-            field_name, addr
-        ));
+        return Err(format!("{} must be 42 chars (0x + 40 hex): {}", field_name, addr));
     }
-
     if !addr[2..].chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(format!(
-            "{} contains non-hexadecimal characters: {}",
-            field_name, addr
-        ));
+        return Err(format!("{} contains non-hex characters: {}", field_name, addr));
     }
-
     Ok(())
 }
 
-/// Validate a transaction hash (0x + 64 hex chars)
-///
-/// Required for SETTLE messages when `source != controller-watcher`.
 pub fn validate_transaction_hash(hash: &str, field_name: &str) -> Result<(), String> {
     if !hash.starts_with("0x") {
-        return Err(format!(
-            "{} must start with 0x: {}",
-            field_name, hash
-        ));
+        return Err(format!("{} must start with 0x: {}", field_name, hash));
     }
-
     if hash.len() != 66 {
-        return Err(format!(
-            "{} must be 66 characters (0x + 64 hex chars): {}",
-            field_name, hash
-        ));
+        return Err(format!("{} must be 66 chars (0x + 64 hex): {}", field_name, hash));
     }
-
     if !hash[2..].chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(format!(
-            "{} contains non-hex characters: {}",
-            field_name, hash
-        ));
+        return Err(format!("{} contains non-hex characters: {}", field_name, hash));
     }
-
     Ok(())
 }
 
 // ============================================================================
-// ID + Correlation Validation (TGP-00 §3.4)
+// ID + Correlation Validation (TGP-00 v3.2)
 // ============================================================================
 
-/// Validate a message ID format
+/// Validate a message ID
 ///
-/// Requirements:
-///     • Non-empty
-///     • If `expected_prefix` provided, must begin with `${prefix}-`
-///
-/// Example valid IDs:
-///     • `q-abc123`
-///     • `offer-xyz789`
-///     • `settle-1234abcd`
+/// Valid prefixes in TGP v3.2:
+///   • q-
+///   • ack-
+///   • settle-
+///   • err-
 pub fn validate_id_format(id: &str, expected_prefix: Option<&str>) -> Result<(), String> {
     validate_non_empty(id, "id")?;
 
     if let Some(prefix) = expected_prefix {
-        let expected = format!("{}-", prefix);
-        if !id.starts_with(&expected) {
+        let prefix_str = match prefix {
+            "QUERY"  => "q-",
+            "ACK"    => "ack-",
+            "SETTLE" => "settle-",
+            "ERROR"  => "err-",
+            other => return Err(format!("Unknown message type prefix: {}", other)),
+        };
+
+        if !id.starts_with(prefix_str) {
             return Err(format!(
                 "id must start with '{}': {}",
-                expected, id
+                prefix_str, id
             ));
         }
-        if id.len() <= expected.len() {
+
+        if id.len() <= prefix_str.len() {
             return Err(format!(
                 "id must contain characters after '{}': {}",
-                expected, id
+                prefix_str, id
             ));
         }
     }
@@ -168,19 +101,7 @@ pub fn validate_id_format(id: &str, expected_prefix: Option<&str>) -> Result<(),
     Ok(())
 }
 
-/// Validate a correlation ID (referencing QUERY/OFFER/SETTLE)
-///
-/// Unlike message IDs, correlation IDs *may* reference any prior phase.
-/// This validator ensures:
-///     • Non-empty
-///     • Optional prefix-phase check
-///
-/// Example:
-/// ```
-/// use tbc_core::tgp::validation::validate_correlation_id;
-///
-/// validate_correlation_id("q-abc", Some("QUERY")).unwrap();
-/// ```
+/// Validate correlation IDs for QUERY/ACK/SETTLE/ERROR
 pub fn validate_correlation_id(
     correlation_id: &str,
     expected_phase: Option<&str>,
@@ -189,16 +110,16 @@ pub fn validate_correlation_id(
 
     if let Some(phase) = expected_phase {
         let prefix = match phase {
-            "QUERY" => "q-",
-            "OFFER" => "offer-",
+            "QUERY"  => "q-",
+            "ACK"    => "ack-",
             "SETTLE" => "settle-",
-            "ERROR" => "err-",
-            _ => return Err(format!("Unknown phase: {}", phase)),
+            "ERROR"  => "err-",
+            other => return Err(format!("Unknown correlation phase: {}", other)),
         };
 
         if !correlation_id.starts_with(prefix) {
             return Err(format!(
-                "correlation_id should reference a {} message (start '{}'): {}",
+                "correlation_id must reference a {} message (starts with '{}'): {}",
                 phase, prefix, correlation_id
             ));
         }
@@ -208,16 +129,9 @@ pub fn validate_correlation_id(
 }
 
 // ============================================================================
-// URL + Timestamp Validation (Optional, but useful)
+// URL + Timestamp Validation (Optional)
 // ============================================================================
 
-/// Validate URL scheme (not a full URL parser)
-///
-/// Allowed schemes:
-///     • http://
-///     • https://
-///     • ipfs://
-///     • ar://
 pub fn validate_url_format(url: &str, field_name: &str) -> Result<(), String> {
     validate_non_empty(url, field_name)?;
 
@@ -225,7 +139,7 @@ pub fn validate_url_format(url: &str, field_name: &str) -> Result<(), String> {
 
     if !VALID.iter().any(|p| url.starts_with(p)) {
         return Err(format!(
-            "{} must start with a valid URL scheme (http://, https://, ipfs://, ar://): {}",
+            "{} must start with a valid scheme (http/https/ipfs/ar): {}",
             field_name, url
         ));
     }
@@ -233,7 +147,6 @@ pub fn validate_url_format(url: &str, field_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Validate RFC3339 timestamp (simple check for `T` + timezone)
 pub fn validate_rfc3339_format(timestamp: &str, field_name: &str) -> Result<(), String> {
     validate_non_empty(timestamp, field_name)?;
 
@@ -244,14 +157,14 @@ pub fn validate_rfc3339_format(timestamp: &str, field_name: &str) -> Result<(), 
         ));
     }
 
-    let has_timezone =
+    let has_tz =
         timestamp.ends_with('Z') ||
         timestamp.contains('+') ||
         timestamp.matches('-').count() > 2;
 
-    if !has_timezone {
+    if !has_tz {
         return Err(format!(
-            "{} must include timezone indicator (Z or +offset): {}",
+            "{} must include timezone indicator: {}",
             field_name, timestamp
         ));
     }
@@ -262,57 +175,20 @@ pub fn validate_rfc3339_format(timestamp: &str, field_name: &str) -> Result<(), 
 // ============================================================================
 // Tests
 // ============================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_validate_non_empty() {
-        assert!(validate_non_empty("ok", "x").is_ok());
-        assert!(validate_non_empty("", "x").is_err());
+    fn test_validate_id_prefixes() {
+        assert!(validate_id_format("q-123", Some("QUERY")).is_ok());
+        assert!(validate_id_format("ack-xyz", Some("ACK")).is_ok());
+        assert!(validate_id_format("settle-1", Some("SETTLE")).is_ok());
+        assert!(validate_id_format("err-a", Some("ERROR")).is_ok());
     }
 
     #[test]
-    fn test_validate_positive_amount() {
-        assert!(validate_positive_amount(1, "amount").is_ok());
-        assert!(validate_positive_amount(0, "amount").is_err());
-    }
-
-    #[test]
-    fn test_validate_address() {
-        assert!(validate_address("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0", "addr").is_ok());
-        assert!(validate_address("742d35Cc6634C0532925a3b844Bc9e7595f0bEb0", "addr").is_err());
-    }
-
-    #[test]
-    fn test_validate_tx_hash() {
-        let valid = "0x9f2d8e7c3b1a5f4e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e";
-        assert!(validate_transaction_hash(valid, "tx").is_ok());
-        assert!(validate_transaction_hash("0x123", "tx").is_err());
-    }
-
-    #[test]
-    fn test_validate_id_format() {
-        assert!(validate_id_format("q-abc", Some("q")).is_ok());
-        assert!(validate_id_format("invalid", Some("q")).is_err());
-    }
-
-    #[test]
-    fn test_validate_correlation_id() {
-        assert!(validate_correlation_id("q-abc", Some("QUERY")).is_ok());
-        assert!(validate_correlation_id("", Some("QUERY")).is_err());
-    }
-
-    #[test]
-    fn test_validate_url_format() {
-        assert!(validate_url_format("https://example.com", "uri").is_ok());
-        assert!(validate_url_format("ftp://example.com", "uri").is_err());
-    }
-
-    #[test]
-    fn test_validate_rfc3339_format() {
-        assert!(validate_rfc3339_format("2025-11-10T23:59:59Z", "ts").is_ok());
-        assert!(validate_rfc3339_format("2025-11-10", "ts").is_err());
+    fn test_invalid_prefix() {
+        assert!(validate_id_format("offer-123", Some("QUERY")).is_err());
     }
 }

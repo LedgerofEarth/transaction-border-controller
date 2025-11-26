@@ -1,32 +1,25 @@
 // ============================================================================
-// TGP Supporting Types
+// TGP Supporting Types -- v3.2 Aligned
 // crates/tbc-core/src/tgp/types.rs
 //
-// Updated for:
-//   • zk_must_verify (state.rs integration)
-//   • TGP-00 v01.1 trust scoring
-//   • anomaly scaffolding (future risk engine)
-//   • direct compatibility with updated handlers
-//   • settlement trust weighting
+// This file intentionally contains *no gateway state*, *no OFFER semantics*,
+// and no mutable fields. Everything here is deterministic, WASM-safe, portable,
+// and suitable for offline validation.
 //
-// This file intentionally contains *no logging* and no external deps
-// beyond serde. Deterministic, WASM-safe, portable.
+// Aligned with TGP-00 v3.2:
+//   • OFFER removed
+//   • EconomicEnvelope attached to ACK(status=allow)
+//   • ZkProfile retained as pure client preference
+//   • DomainTrust optional for multi-gateway routing
+//   • Anomaly scoring remains pure
+//   • SettleSource remains pure
 // ============================================================================
 
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
-// ZkProfile Enumeration (§3.5)
+// ZkProfile (§4.1 intent.mode)
 // ============================================================================
-
-/// Buyer's zero-knowledge / CoreProver preference.
-///
-/// Controllers map this into:
-//   • zk_must_verify (immutable per-session)
-///   • settlement path selection (escrow vs direct)
-///
-/// NOTE: The *session* stores the actual `zk_must_verify` based on
-/// policy + OFFER, not the buyer preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ZkProfile {
     #[serde(rename = "NONE")]
@@ -40,19 +33,11 @@ pub enum ZkProfile {
 }
 
 impl ZkProfile {
-    pub fn allows_escrow(&self) -> bool {
-        matches!(self, ZkProfile::Optional | ZkProfile::Required)
-    }
-
-    pub fn requires_escrow(&self) -> bool {
-        matches!(self, ZkProfile::Required)
-    }
-
     pub fn description(&self) -> &'static str {
         match self {
-            ZkProfile::None => "Buyer prefers direct L8 settlement",
-            ZkProfile::Optional => "Buyer defers to Controller policy",
-            ZkProfile::Required => "Buyer demands CoreProver escrow",
+            ZkProfile::None => "Client prefers direct settlement",
+            ZkProfile::Optional => "Client defers to gateway routing",
+            ZkProfile::Required => "Client demands shielded settlement",
         }
     }
 }
@@ -74,17 +59,16 @@ impl std::fmt::Display for ZkProfile {
 }
 
 // ============================================================================
-// EconomicEnvelope (§3.6)
+// EconomicEnvelope (§7) -- For ACK(status=allow)
 // ============================================================================
-
-/// Defines fee + validity constraints for an OFFER.
-///
-/// Controllers MUST validate these before sending.
-///
-/// Consumers (Buyer, CoreProver, Controller) use this to validate responses.
+//
+// In TGP v3.2, the envelope appears *only* on ACK(status=allow),
+// never on QUERY, never on OFFER (removed).
+//
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EconomicEnvelope {
     pub max_fees_bps: u32,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
 }
@@ -106,48 +90,11 @@ impl EconomicEnvelope {
 
         Ok(())
     }
-
-    pub fn new(max_fees_bps: u32) -> Self {
-        Self {
-            max_fees_bps,
-            expiry: None,
-        }
-    }
-
-    pub fn with_expiry(max_fees_bps: u32, expiry: impl Into<String>) -> Self {
-        Self {
-            max_fees_bps,
-            expiry: Some(expiry.into()),
-        }
-    }
-
-    pub fn max_fee_percentage(&self) -> f64 {
-        self.max_fees_bps as f64 / 100.0
-    }
-
-    pub fn calculate_max_fee(&self, amount: u64) -> u64 {
-        ((amount as u128 * self.max_fees_bps as u128) / 10000) as u64
-    }
-
-    pub fn is_expired(&self, now_rfc3339: &str) -> bool {
-        match &self.expiry {
-            Some(exp) => now_rfc3339 > exp,
-            None => false,
-        }
-    }
 }
 
 // ============================================================================
-// SettleSource (§3.7)
+// SettleSource (§5.4)
 // ============================================================================
-
-/// Settlement reporter identity.
-///
-/// Used for trust-level weighting + anomaly scoring in handlers.
-///
-/// ControllerWatcher = highest trust (chain-observed)
-/// BuyerNotify = lowest trust (self-reported)
-/// CoreproverIndexer = intermediate trust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "kebab-case")]
 pub enum SettleSource {
@@ -157,17 +104,10 @@ pub enum SettleSource {
 }
 
 impl SettleSource {
-    /// Whether this settlement source requires validation.
     pub fn requires_verification(&self) -> bool {
         !matches!(self, SettleSource::ControllerWatcher)
     }
 
-    /// Trust weighting (0–100).
-    ///
-    /// This is used by:
-    ///   - settle handler
-    ///   - anomaly scoring engine (future)
-    ///   - audit/trust-report exporters (future)
     pub fn trust_level(&self) -> u8 {
         match self {
             SettleSource::ControllerWatcher => 100,
@@ -175,39 +115,11 @@ impl SettleSource {
             SettleSource::BuyerNotify => 30,
         }
     }
-
-    pub fn description(&self) -> &'static str {
-        match self {
-            SettleSource::BuyerNotify => "Buyer-reported (unverified)",
-            SettleSource::ControllerWatcher => "Controller watcher (verified)",
-            SettleSource::CoreproverIndexer => "External CP indexer (partially trusted)",
-        }
-    }
-}
-
-impl std::fmt::Display for SettleSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SettleSource::BuyerNotify => write!(f, "buyer-notify"),
-            SettleSource::ControllerWatcher => write!(f, "controller-watcher"),
-            SettleSource::CoreproverIndexer => write!(f, "coreprover-indexer"),
-        }
-    }
 }
 
 // ============================================================================
-// Anomaly & Trust Scaffolding (NEW)
+// Anomaly Engine (pure, stateless)
 // ============================================================================
-
-/// Reasons a session might accumulate anomaly points.
-///
-/// These do *not* represent errors; they help power future MGMT APIs.
-///
-/// Examples:
-///   • Buyer provides inconsistent domains
-///   • SETTLE without tx hash from a low-trust source
-///   • Significant fee deviations
-///   • Conflicts with controller policy hashes
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AnomalyKind {
     MissingTxHash,
@@ -215,10 +127,9 @@ pub enum AnomalyKind {
     ExpiredEnvelope,
     DomainMismatch,
     PolicyMismatch,
-    UnexpectedOffer,
+    UnexpectedAck,         // ← OFFER no longer exists
 }
 
-/// Lightweight anomaly record
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnomalyEvent {
     pub kind: AnomalyKind,
@@ -226,8 +137,6 @@ pub struct AnomalyEvent {
     pub message: String,
 }
 
-/// Output for handlers that want to return anomaly information.
-/// Handlers may return `anomaly_score` inside TGP Responses.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnomalySummary {
     pub total_score: u16,
@@ -236,37 +145,22 @@ pub struct AnomalySummary {
 
 impl AnomalySummary {
     pub fn new() -> Self {
-        Self {
-            total_score: 0,
-            events: vec![],
-        }
+        Self { total_score: 0, events: vec![] }
     }
 
     pub fn add(&mut self, kind: AnomalyKind, weight: u8, msg: impl Into<String>) {
-        let ev = AnomalyEvent {
+        self.total_score += weight as u16;
+        self.events.push(AnomalyEvent {
             kind,
             weight,
             message: msg.into(),
-        };
-        self.total_score += weight as u16;
-        self.events.push(ev);
-    }
-
-    pub fn is_clean(&self) -> bool {
-        self.total_score == 0
+        });
     }
 }
 
 // ============================================================================
-// Domain Trust (NEW)
+// Optional Domain Trust (routing metadata support)
 // ============================================================================
-
-/// Controllers may score domains to modulate routing logic.
-///
-/// Used in:
-///   • QUERY validation
-///   • OFFER generation
-///   • anomaly scoring (e.g., buyer domain mismatch)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DomainTrust {
     Unknown,
@@ -289,7 +183,6 @@ impl DomainTrust {
 // ============================================================================
 // Tests
 // ============================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -301,13 +194,5 @@ mod tests {
         a.add(AnomalyKind::SuspiciousTxSource, 10, "low-trust source");
         assert_eq!(a.total_score, 15);
         assert_eq!(a.events.len(), 2);
-    }
-
-    #[test]
-    fn test_domain_trust_weights() {
-        assert_eq!(DomainTrust::Unknown.weight(), 10);
-        assert_eq!(DomainTrust::Low.weight(), 25);
-        assert_eq!(DomainTrust::Medium.weight(), 60);
-        assert_eq!(DomainTrust::High.weight(), 100);
     }
 }

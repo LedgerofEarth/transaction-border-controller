@@ -1,261 +1,366 @@
-📙 CoreProve-00 v1.0 — Merchant Settlement Contract Specification
+📘 CoreProve-00 v0.9 — System Specification
 
-Status: Draft
+A Trust-Minimized Framework for Dual-Escrow Settlement and Privacy-Preserving Receipt Anchoring
+
+Version: 0.9 Draft
+Status: Internal
 Author: Ledger of Earth
-Scope: On-chain settlement contract definition
-Audience: Smart contract developers, auditors, TGP implementers, gateway operators
+Date: 2025-11-24
 
 ⸻
 
 0. Abstract
 
-CoreProve defines a non-custodial, trust-minimized settlement contract system that enables untrusted parties to transact safely using standardized protocols and payment gateways. This system allows merchants to accept blockchain payments in a compliant, auditable, and secure manner, while shielding wallet addresses, financial history, and sensitive metadata of both parties.
+CoreProve is a trust-minimized framework for creating, deploying, and managing dual-escrow smart contracts to enable secure, private exchange between people or their agents.
 
-A CoreProve Settlement Contract provides a configurable, merchant-specific template that operates as a constrained custodian: it may temporarily hold funds but never contains admin keys, backdoors, upgrade paths, or discretionary control surfaces. All state transitions follow the contract’s predefined logic and the verb-level semantics defined by the Transaction Gateway Protocol (TGP).
+CoreProve invents Receipt Anchoring.
+Receipt Anchoring is a privacy-preserving mechanism that allows users to prove that a transaction occurred without exposing their wallet, balances, or identity.
 
-This specification defines:
-	•	the escrow model
-	•	the state machine supporting TGP verbs (COMMIT, ACCEPT, CLAIM, WITHDRAW)
-	•	the Settlement Envelope parameters consumed by the Gateway
-	•	the optional Receipt NFT
-	•	ZK attestation hooks for shielded flows
-	•	timeout and L6 WITHDRAW eligibility rules
-	•	mandatory safety invariants for deterministic settlement
-
-CoreProve-00 defines the merchant’s on-chain execution environment.
-TGP-00 defines the off-chain transaction model and Economic Envelopes.
-TGP-CP-00 and TGP-EXT-00 define the client profiles and extension runtime.
+In Receipt Anchoring, receipts are minted into an immutable, adminless vault and referenced via zero-knowledge proofs rather than wallet ownership. This resolves the fundamental doxxing flaw of traditional on-chain transactions and restores the privacy expectations of real-world commerce.
 
 ⸻
 
-1. Scope
+1. System Overview
 
-CoreProve-00 defines:
-	•	Settlement Contract interface
-	•	Escrow lifecycle and state machine
-	•	Mapping of TGP verbs to on-chain entry points
-	•	WITHDRAW eligibility rules (aligned with TGP L6)
-	•	Receipt NFT minting and settlement metadata
-	•	Fee and payout rules
-	•	Timeout and non-cooperative termination rules
-	•	Deterministic settlement behavior
+1.1 Purpose
 
-CoreProve-00 does not define:
-	•	Off-chain TGP message structures (TGP-00)
-	•	Client behavior or user agent logic (TGP-CP-00)
-	•	Browser extension runtime (TGP-EXT-00)
-	•	ZK circuit definitions (CoreProve-ZK-00)
-	•	Merchant UX or merchant enrollment processes
+CoreProve provides the on-chain infrastructure necessary to facilitate:
+	•	secure dual-escrow between buyers and sellers
+	•	privacy-preserving settlement with ZK proofs
+	•	wallet-unlinkable receipts
+	•	deterministic settlement flows
+	•	merchant-specific immutable business logic
+	•	safe agent-driven or autonomous commerce
 
-⸻
+It forms the settlement layer that higher-level protocols (like TGP/TBC) route into.
 
-2. Architecture Overview
-
-A CoreProve Settlement Contract is a merchant-deployed, non-upgradeable contract whose purpose is to escrow funds, enforce payment logic, and expose deterministic settlement outcomes to the Gateway.
-
-The architecture consists of:
-	1.	Settlement Contract (this specification)
-	2.	TGP Gateway (TBC) observing contract state
-	3.	Client/Wallet executing Economic Envelopes
-	4.	Optional Receipt NFT confirming settlement
-
-Client → QUERY
-Gateway → ACK (Economic Envelope)
-Client → executes tx (commit/accept/claim/withdraw)
-Contract → updates escrow state
-Gateway → SETTLE
-
-The contract itself never sends messages. The Gateway observes on-chain state.
+1.2 Design Principles
+	•	Immutability: merchant contracts are not upgradeable.
+	•	Least Trust: no party can seize or redirect funds.
+	•	Privacy: settlement occurs without exposing user wallets.
+	•	Determinism: dual commits ensure predictable settlement.
+	•	Safety: all escrows have TTLs to prevent lock-in.
+	•	Sovereignty: receipts anchor verifiable commerce without surveillance.
 
 ⸻
 
-3. Escrow Model
+2. Components
 
-Each escrow instance is represented by an immutable struct:
+2.1 Settlement Contract (per merchant)
 
-Escrow {
-    buyer: address
-    seller: address
-    amount: uint256
-    state: EscrowState
-    created_at: uint64
-    ttl: uint64
-}
+Defines the merchant’s escrow and settlement rules.
+Features:
+	•	buyerCommit (escrow deposit)
+	•	sellerCommit (settlement + payout)
+	•	dual ZK proof inputs
+	•	dual nullifiers (buyer + seller)
+	•	TTL enforcement
+	•	multi-asset support (ERC-20 + native)
+	•	fee routing
+	•	receipt event emission
 
-3.1 Escrow States
-
-PENDING      — buyer has committed funds
-ACCEPTED     — seller counter-accepts (signature or action)
-FULFILLED    — fulfillment evidence recorded (optional)
-CLAIMED      — seller has claimed payout
-REFUNDED     — buyer withdrew after timeout
-RELEASED     — cooperative release
-REVERTED     — contract failure (never discretionary)
-
-All state transitions are append-only and deterministic.
+Immutable after deployment.
 
 ⸻
 
-4. Mapping TGP Verbs to Contract Functions
+2.2 Merchant Contract Factory
 
-TGP Verb	Contract Function	Description
-COMMIT	commit()	Buyer deposits funds into escrow
-ACCEPT	accept()	Seller confirms participation
-CLAIM	claim()	Seller claims after fulfillment
-WITHDRAW	withdraw()	Buyer or seller retrieves funds based on L6 rules
+Responsible for:
+	•	registering certified templates (by version)
+	•	stability flags (stable / experimental / deprecated)
+	•	deterministic CREATE2 deployments
+	•	constructor parameter injection
+	•	public template metadata
 
-4.1 COMMIT — Buyer deposits funds
-
-Rules:
-	•	MUST include exact value specified by Economic Envelope
-	•	MUST initialize escrow state = PENDING
-	•	MUST record timestamps
-
-4.2 ACCEPT — Seller confirmation
-
-Rules:
-	•	MAY be a zero-value transaction
-	•	MUST validate seller identity
-	•	MUST transition state = ACCEPTED
-
-4.3 CLAIM — Seller payout
-
-Rules:
-	•	MUST ensure ACCEPTED or FULFILLED
-	•	MUST pay seller the net amount minus fees
-	•	MUST mint Receipt NFT if enabled
-	•	MUST finalize state = CLAIMED
-
-4.4 WITHDRAW — Timeout or cooperative release
-
-WITHDRAW is valid only if:
-	•	buyer timeout expired (PENDING → REFUNDED)
-	•	seller timeout expired (ACCEPTED but no claim)
-	•	cooperative release (both consent)
-	•	contract detects a non-recoverable failure (REVERTED)
-
-The contract MUST implement:
-	•	strict L6 eligibility checks
-	•	no override by external authority
-	•	no admin emergency withdrawal
+Factory does not control merchant contracts after deployment.
 
 ⸻
 
-5. Timeout Logic (L6 Eligibility)
+2.3 ReceiptVault (epoch-based)
 
-Each escrow instance carries a TTL (ttl).
+A standalone, adminless vault that:
+	•	mints receipt NFTs
+	•	permanently stores them (non-transferable)
+	•	supports ZK proof referencing
+	•	provides a stable anchoring surface for receipts
+	•	rotates annually or biannually (e.g., 2025-26, 2027-28)
 
-Timeout logic:
-	•	If now > created_at + ttl and escrow not CLAIMED → WITHDRAW allowed
-	•	If fulfillment module is configured, FULFILLED must occur before TTL
-	•	Timeouts are strict; no manual override
-
-L6 rules ensure deterministic WITHDRAW and prevent stuck funds.
+Receipts minted into the vault do not link to buyer or seller wallets.
 
 ⸻
 
-6. Receipt NFT (Optional)
+3. Lifecycle
 
-If enabled, the contract MUST mint a non-transferable NFT containing:
-	•	escrow ID
+3.1 BuyerCommit (Escrow Deposit)
+
+Triggered by buyer or buyer agent.
+
+Inputs include:
+	•	asset + amount
+	•	orderId
+	•	buyer ZK proof
+	•	public signals:
+	•	pkHash_buyer
+	•	nullifier_buyer
+	•	timestamp
 	•	amount
-	•	buyer/seller anonymized references
-	•	settlement timestamp
-	•	settlement result
 
-NFTs MUST be:
-	•	permanent
-	•	non-burnable by third parties
-	•	non-upgradeable
+Validates:
+	•	merchant active
+	•	nullifier unused
+	•	timestamp fresh
+	•	ZK signals match order + amount
 
-Purpose:
-Proof of settlement, useful for audits, refunds, accounting, or privacy-preserving attestations.
-
-⸻
-
-7. Fees
-
-A CoreProve Contract MAY define:
-	•	merchant fee share
-	•	TBC fee (fixed or percent)
-	•	gas reconciliation reserve
-
-Rules:
-	•	Fees MUST be deterministic
-	•	No external entity MAY claim arbitrary fees
-	•	Fee formulas MUST be configured at deployment
-	•	No owner-controlled fee parameters post-deployment
+Action:
+	•	funds deposited into escrow
+	•	buyerCommit stored
+	•	buyer nullifier marked used
+	•	event emitted
 
 ⸻
 
-8. ZK Hooks (Shielded Mode)
+3.2 SellerCommit (Settlement + Withdrawal)
 
-CoreProve supports TGP mode = SHIELDED.
+Triggered only by merchant admin.
 
-ZK hooks MAY include:
-	•	verifyProof(bytes proof)
-	•	nullifier replay checks
-	•	proof-based ACCEPT or CLAIM
-	•	buyer or seller selective disclosure
+Inputs include:
+	•	orderId
+	•	seller ZK proof
+	•	public signals:
+	•	pkHash_seller
+	•	nullifier_seller
+	•	timestamp
+	•	orderHash
 
-This specification defines the interface, not the circuits.
+Validates:
+	•	escrow exists
+	•	commit not expired
+	•	seller nullifier unused
+	•	orderHash match
+	•	merchant active
 
-Circuits are defined in CoreProve-ZK-00.
+Action:
+	•	compute fees
+	•	payout: buyer → merchant recipients
+	•	delete escrow record
+	•	mark seller nullifier used
+	•	emit SettlementExecuted
+	•	trigger ReceiptVault minting
 
-⸻
-
-9. Deterministic Behavior
-
-A compliant settlement contract MUST exhibit:
-	•	deterministic state transitions
-	•	no randomness
-	•	no oracle dependencies
-	•	no privileged roles
-	•	no ability to pause, upgrade, or override logic
-
-All settlement outcomes MUST be derivable solely from:
-	•	the contract’s public state
-	•	the contract’s predefined rules
-	•	TGP-issued Economic Envelopes
-
-⸻
-
-10. Safety Invariants
-
-The contract MUST ensure:
-	1.	No admin key exists
-	2.	Funds cannot be seized
-	3.	Funds cannot be redirected except by CLAIM or WITHDRAW
-	4.	Escrow cannot be erased or overwritten
-	5.	Timeouts cannot be bypassed
-	6.	WITHDRAW eligibility must follow L6 rules exactly
-	7.	Contract must be non-upgradeable
-	8.	All ETH/token transfers MUST be checked for success
+This is the only withdrawal path.
 
 ⸻
 
-11. Minimal Examples
+3.3 TTL and Expiration
 
-11.1 COMMIT → ACCEPT → CLAIM
-	1.	Buyer sends COMMIT (escrow created, PENDING)
-	2.	Seller sends ACCEPT (state = ACCEPTED)
-	3.	Seller sends CLAIM (funds to seller, state = CLAIMED)
-	4.	Gateway emits SETTLE
+Each escrow has a TTL:
 
-11.2 Buyer Timeout Refund
-	1.	Buyer COMMIT
-	2.	Seller never ACCEPTS
-	3.	TTL expires
-	4.	Buyer WITHDRAW → REFUNDED
-	5.	Gateway emits SETTLE
+expiration = buyerTimestamp + ttlSeconds
 
-11.3 Cooperative Release
-	1.	Buyer COMMIT
-	2.	Seller ACCEPTS
-	3.	Both mutually sign a release
-	4.	WITHDRAW → RELEASED
-	5.	Gateway emits SETTLE
+If sellerCommit does not occur:
+	•	buyer may call buyerCancelExpiredCommit()
+	•	escrow refunded
+	•	receipt not minted
+	•	buyer nullifier remains used (ZK integrity)
+
+TTL prevents locked funds and stale commitments.
 
 ⸻
 
-End of CoreProve-00 v1.0
+4. Zero-Knowledge Proof Model
+
+4.1 Buyer ZK Input
+
+Public signals:
+
+[ pkHash_buyer, nullifier_buyer, ts_buyer, amount ]
+
+Contract enforces:
+	•	pkHash_buyer matches buyer ephemeral key
+	•	nullifier unused
+	•	timestamp within freshness bound
+	•	amount equal to payment
+
+⸻
+
+4.2 Seller ZK Input
+
+Public signals:
+
+[ pkHash_seller, nullifier_seller, ts_seller, orderHash ]
+
+Contract enforces:
+	•	nullifier unused
+	•	ts_seller fresh
+	•	orderHash = keccak256(orderId)
+	•	pkHash_seller matches ephemeral seller identity
+
+⸻
+
+4.3 Nullifier Rules
+
+Each nullifier (buyer and seller) is:
+	•	single-use
+	•	permanently burned after use
+	•	prevents replay or state modification
+
+⸻
+
+5. Multi-Asset Escrow
+
+5.1 Supported Assets
+	•	Any ERC-20 token
+	•	Native assets (ETH, PLS)
+
+All transfers use safe wrappers.
+
+5.2 Fee Operations
+
+Fees include:
+	•	TBC fee
+	•	ZK relay fee
+	•	merchant net
+
+All fee parameters are template-defined and immutable per merchant.
+
+⸻
+
+6. TTL Safety Model
+
+6.1 Deployment-Time Configuration
+
+Merchant chooses:
+
+ttlSeconds
+
+This value is immutable.
+
+6.2 Safety Properties
+
+TTL ensures:
+	•	sellers cannot delay indefinitely
+	•	buyers cannot be trapped in escrow
+	•	stale orders do not persist
+	•	reconcilers and auditors can bound execution windows
+
+⸻
+
+7. Merchant Deployment and Administration
+
+7.1 Deployment
+
+Merchants deploy via Factory:
+	•	select template version
+	•	verify stability flag
+	•	provide constructor args
+	•	CREATE2 deterministic address generated
+
+7.2 Admin Capabilities
+
+Merchant admin can:
+	•	activate / deactivate merchant
+	•	execute sellerCommit
+
+Merchant admin cannot:
+	•	seize funds
+	•	modify logic
+	•	upgrade contract
+	•	alter TTL
+	•	change fee logic
+	•	alter escrow state directly
+
+⸻
+
+8. Security Properties
+
+8.1 Immutability
+
+Template-based deployment ensures:
+	•	no upgradability
+	•	no privileged escape paths
+	•	reproducible logic across merchants
+
+8.2 Replay Protection
+
+Dual-nullifier replay protection ensures:
+	•	buyers cannot double-commit
+	•	sellers cannot double-settle
+	•	escrow states cannot be mutated after completion
+
+8.3 Minimal Attack Surface
+
+State includes only:
+	•	buyer escrow record
+	•	buyer nullifier map
+	•	seller nullifier map
+	•	merchant active flag
+
+No attack-surface for role escalation.
+
+⸻
+
+9. Agent & Protocol Integration
+
+9.1 TGP Mapping
+
+The Transaction Gateway Protocol maps:
+	•	TGP_COMMIT → buyerCommit
+	•	TGP_SETTLE → sellerCommit
+	•	TGP_RECEIPT → receipt event path
+
+9.2 TBC Role
+
+The Transaction Border Controller:
+	•	relays ZK proofs
+	•	optionally pays gas
+	•	reimburses gas via settlement flow
+	•	consumes settlement + receipt events
+	•	orchestrates multi-chain routing
+
+⸻
+
+10. Privacy Guarantees
+
+10.1 Ephemeral Identity
+
+Buyers and sellers use ephemeral keys proven via ZK.
+No wallet addresses ever appear on-chain.
+
+10.2 Receipt Anchoring
+
+Receipts:
+	•	minted into a vault, not to user wallets
+	•	store no identity information
+	•	represent immutable proof-of-exchange
+	•	are referenced via ZK, not token ownership
+
+This provides wallet-unlinkable proof of commerce.
+
+10.3 Selective Disclosure
+
+Users can prove:
+	•	a transaction occurred
+	•	a specific order was fulfilled
+	•	a receipt exists
+
+without linking actions across multiple receipts.
+
+⸻
+
+11. Summary
+
+CoreProve provides:
+	•	secure, trust-minimized dual escrow
+	•	privacy-preserving ZK settlement
+	•	multi-asset support
+	•	merchant-safe immutable logic
+	•	revocation-free receipt anchoring
+	•	agent-compatible flows
+	•	wallet-unlinkable proofs of commerce
+
+Receipt Anchoring restores privacy to blockchain commerce by allowing proof-of-exchange without identity exposure.
+
+⸻
+
+End of Specification — CoreProve-00 v0.9
+

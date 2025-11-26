@@ -24,6 +24,7 @@ pub mod handlers;      // Handler layer implementations (QUERY/OFFER/SETTLE/ERRO
 pub mod logging;       // Structured + colorized TGP logs
 pub mod store;         // Session storage implementations
 pub mod workers;       // Background workers (cleanup, monitoring)
+pub mod ws;
 //pub mod codec_tx;      // NEW -- parsing, classification, metadata construction
 // pub mod error;         // Future: gateway-specific errors (optional)
 

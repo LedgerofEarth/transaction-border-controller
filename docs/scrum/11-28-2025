@@ -1,0 +1,298 @@
+
+
+📄 Daily Scrum Kickoff
+
+CoreLaboration Sprint -- CoreProve System Buildout
+Date: 2025-11-28
+
+This kickoff file reloads all critical working context for today’s sprint and includes the Outstanding Questions Answer Pack at the end so any AI teammate can see yesterday’s open items and the current system state.
+
+⸻
+
+1. Mission for Day 5
+
+Today’s work focuses on stabilizing the foundation created in Days 1–4:
+
+Primary Day-5 Goals
+	1.	Fix remaining TypeScript import drift from Wave-3 refactor
+	2.	Patch the remaining ~13 files needing Wave-3 realignment
+	3.	Finish background/content-script integration
+	4.	Make popup → background → wsBridge → TBC path fully deterministic
+	5.	Begin ZK-STUB implementation (buyer/seller envelopes)
+	6.	Verify basic plumbing before implementing circuits
+	7.	Prepare merchant test harness for end-to-end TGP flow
+	8.	Update state management (session → escrow record mapping)
+
+Secondary Goals
+	•	Record console logs for background & content-script
+	•	Patch the last missing model types
+	•	Begin interactive testing with a dummy TBC
+	•	Update icons and extension packaging if needed
+	•	Begin preparing "demo merchant page" for next week
+
+⸻
+
+2. What We Accomplished Yesterday (Day 4)
+
+(Short Summary)
+
+Yesterday included:
+	•	Cleaning up popup UI restructuring
+	•	Refactoring and rewriting dozens of TS modules
+	•	Re-aligning the extension to the simplified TGP implementation
+	•	Fixing the ESBuild pipeline, including IIFE content scripts
+	•	Updating manifest.json to correct MV3 semantics
+	•	Eliminating legacy v3.2 code paths
+	•	Building the first fully functional build of the extension
+	•	Testing it successfully in Chrome
+
+We are standing on a solid, well-defined foundation.
+
+⸻
+
+3. Architecture Context (High-Level)
+
+This section ensures any AI teammate rejoining on Day 5 instantly understands the system design.
+
+3.1 The CoreProve System (Trust-Minimized Architecture)
+
+CoreProve is a trust-minimized commerce system built on the TGP protocol and composed of three major components:
+
+(A) CoreProve Client (what we’re building now)
+	•	MV3 browser extension
+	•	Optional mobile/web app later
+	•	Handles:
+	•	TGP-QUERY generation
+	•	ZK-NAT bundling (wallet NAT for privacy)
+	•	Delegation + EIP-712 signing
+	•	Buyer/seller settlement flows
+	•	UI for DirectPay, Update Activity, Settings
+	•	Interactions with the TBC
+
+(B) Transaction Border Controller (TBC)
+
+A TGP gateway with security + firewall semantics, modeled after telecom SBCs:
+	•	Terminates and re-issues TGP sessions
+	•	Implements ZK-NAT (wallet NAT, not IP NAT)
+	•	Provides anti-replay, rate-limits, filters
+	•	Provides secure merchant/buyer signaling
+	•	Optionally relays gas (fallback = client signs locally)
+	•	Completely optional; client fallback ensures no middleware dependency
+	•	Can run:
+	•	Locally
+	•	Remotely via SSH tunnel
+	•	In cloud deployments
+
+TBC = neutral engine of secure ZK commerce, but not required for protocol correctness.
+
+(C) CoreProve Merchant Portal
+	•	NOT the merchant UI
+	•	It is the policy configuration environment for merchants:
+	•	Settlement policy
+	•	Withdrawal policy
+	•	Gas delegation settings
+	•	Receipt anchoring options
+	•	MARi access control settings
+	•	ZK optionality
+
+MARi (Merchant Anchored Receipt Interface)
+
+A modern merchant interface for:
+	•	Merchant-identity anchoring
+	•	Confirming receipt of settlements
+	•	Receiving buyer messages
+	•	Event streams for order & delivery tracking
+	•	Optional merchant chat & notification integration
+
+MARi does not imply that "clients never talk to merchants" -- instead, it allows controlled, authentic, cryptographically verified merchant communication with buyers.
+
+⸻
+
+4. Today’s Work Strategy (Day 5)
+
+4.1 Work Breakdown (Wave-5 Tasks)
+
+Task Set A -- Fix Import Drift
+	•	The Wave-3 refactor introduced renames:
+	•	domWatchers → domWatcher.ts
+	•	settlementPopupCoordinators → settlmentPopupCoordinators.ts
+	•	Buyer/Seller envelope filenames
+	•	Fix any broken alias paths
+	•	Ensure tsconfig paths remain correct
+
+Task Set B -- Patch Remaining TypeScript Files
+Approximately 13 files still require:
+	•	paths → canonical Wave-3 names
+	•	references to eliminated fields removed
+	•	message types updated to minimal TGP forms
+	•	sessionId propagation added
+
+Task Set C -- Background Runtime Verification
+	•	Ensure background.ts imports are correct
+	•	Ensure messageBus routes W3_TGP_* events properly
+	•	Test wsBridge startup behavior
+	•	Verify Chrome runtime logs
+
+Task Set D -- Content Script Bring-Up
+	•	Ensure IIFE build output runs in-page
+	•	Verify window.TGP.requestPayment injection
+	•	Implement a minimal test merchant integration page
+	•	Confirm 402 detection path (optional today)
+
+Task Set E -- ZK Stub Layer
+Prepare stub functions:
+	•	assembleBuyerEnvelopeZK
+	•	assembleSellerEnvelopeZK
+	•	ZK public input hashing (in-browser WebCrypto)
+	•	Delegation packager updates
+
+Task Set F -- Popup State Mapping
+	•	Map sessionId → escrow activity record
+	•	Basic history list with provisional statuses
+	•	Sync updates to background
+
+(Day 5 stops just before real ZK circuits.)
+
+⸻
+
+5. Day-4 Outstanding Questions -- Full Answer Pack
+
+(Merged into this kickoff file for team visibility)
+
+Below is the full set of answers from yesterday’s outstanding questions, representing the current system state.
+
+⸻
+
+1. Service Worker Status
+
+1.1 Does background.ts execute without errors?
+
+Probably yes.
+Popup loads cleanly, manifest validated, worker registered.
+Minor warnings expected; no fatal issues.
+
+1.2 Console errors in service worker inspector?
+
+Likely 1–2 non-blocking errors related to:
+	•	missing stubs
+	•	wsBridge retry attempts
+	•	path drift
+
+⸻
+
+2. Content Script Injection
+
+2.1 Does window.TGP appear?
+
+Not yet -- work in progress.
+
+2.2 Are 402 headers detected?
+
+Not yet -- test merchant page not wired.
+
+⸻
+
+3. Popup Button Status
+
+Direct Pay
+
+Partially working -- triggers early pipeline only.
+
+View Activity
+
+UI loads but no data (no ACKs yet).
+
+Settings
+
+Fully functional (standalone UI).
+
+Handlers
+
+Most are stubs or early-stage paths.
+
+⸻
+
+4. TBC Availability
+
+Local TBC running?
+
+No. Not yet started.
+
+Cloud TBC via SSH?
+
+Eventually required, not needed today.
+
+⸻
+
+5. Testing Preferences
+
+Manual or automated?
+
+Manual for now (UI & flows still stabilizing).
+
+Mock or real transactions?
+
+Hybrid:
+UI = mock
+Demo = real PulseChain
+
+⸻
+
+6. Success Criteria for Today (Day 5)
+
+We end Day 5 successfully when:
+
+Technical
+	•	All import paths compile
+	•	No missing modules in build
+	•	Content script loads without errors
+	•	window.TGP.requestPayment works on a test page
+	•	background.ts logs correct session lifecycle events
+	•	wsBridge connects (or reconnects cleanly with logs)
+	•	popup → background → wsBridge message path validated
+	•	ZK stubs generate a publicInputs structure
+
+Product
+	•	A test merchant page can request a payment
+	•	Popup records at least one local "pending" activity record
+	•	TGP_QUERY emits with sessionId
+	•	ACK handler logs correctly (even if ACK is mocked)
+
+Documentation
+	•	Day-5 kickoff file (this file) saved
+	•	Outstanding Questions Pack merged
+	•	v5_context_kit.md updated in repo
+
+Stretch Goals
+	•	First full fake ACK round-trip
+	•	Popup displays fake settlement result
+	•	Create a "demo mode" toggle to auto-generate ACKs
+
+⸻
+
+7. End-of-Day Targets
+
+If Day 5 ends with:
+	•	Full build success
+	•	Deterministic message path
+	•	window.TGP working
+	•	ZK stubs in place
+	•	First fake ACK lifecycle working
+
+…then we are perfectly positioned for Day 6: First full working settlement demo.
+
+⸻
+
+8. Kickoff Checklist (To Run Right Now)
+	1.	npm install (double check ethers/jsqr/uuid are present)
+	2.	node build.js (ensure 0 errors)
+	3.	Load unpacked extension
+	4.	Check console for:
+	•	wsBridge logs
+	•	background initialization
+	•	content script logs
+	5.	Visit sample merchant page
+	6.	Call window.TGP.requestPayment({...})
+	7.	Validate popup updates
+
+Let's get to it Shipmates!

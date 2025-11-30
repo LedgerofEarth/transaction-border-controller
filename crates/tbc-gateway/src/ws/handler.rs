@@ -26,7 +26,7 @@ pub async fn ws_upgrade(
     State(state): State<Arc<WsState>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_ws(socket, state))
+    ws.on_upgrade(move |socket| handle_ws_public(socket, state))
 }
 
 /// Main WebSocket loop
@@ -36,7 +36,7 @@ pub async fn ws_upgrade(
 /// - No message is processed without InboundRouter validation
 /// - All errors are logged and returned as TGP ERROR messages
 /// - Binary frames rejected (attack surface reduction)
-async fn handle_ws(mut socket: WebSocket, state: Arc<WsState>) {
+pub async fn handle_ws_public(mut socket: WebSocket, state: Arc<WsState>) {
     tracing::info!("WebSocket connection established for TBC: {}", state.tbc_id);
     
     while let Some(Ok(msg)) = socket.next().await {

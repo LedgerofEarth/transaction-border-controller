@@ -1,0 +1,70 @@
+# =============================================================================
+# TBC Node Docker Compose - Local Development & Testing
+# =============================================================================
+# Usage:
+#   docker-compose -f docker/docker-compose.tbc.yml up --build
+#
+# Test:
+#   curl http://localhost:8080/health
+#   wscat -c ws://localhost:8080/tgp/ws
+# =============================================================================
+
+version: '3.8'
+
+services:
+  tbc-node:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.tbc-node
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      - TBC_LISTEN_ADDR=0.0.0.0:8080
+      - TBC_ID=tbc-local-dev
+      - TBC_LOG_LEVEL=debug
+      
+      # Blockchain Configuration
+      - TBC_RPC_URL=https://rpc.pulsechain.com
+      - TBC_CHAIN_ID=369
+      
+      # CORS (allow all for development)
+      - TBC_ALLOW_ORIGIN=*
+      
+      # Rust logging
+      - RUST_LOG=tbc_node=debug,tbc_gateway=debug
+      - RUST_BACKTRACE=1
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    
+    restart: unless-stopped
+
+# =============================================================================
+# Production Configuration Example (uncomment for production)
+# =============================================================================
+#
+#   tbc-node-prod:
+#     build:
+#       context: ..
+#       dockerfile: docker/Dockerfile.tbc-node
+#     ports:
+#       - "8080:8080"
+#     environment:
+#       - TBC_LISTEN_ADDR=0.0.0.0:8080
+#       - TBC_ID=tbc-prod-1
+#       - TBC_LOG_LEVEL=info
+#       - TBC_RPC_URL=https://your-rpc-provider.com
+#       - TBC_CHAIN_ID=369
+#       - TBC_ALLOW_ORIGIN=https://your-extension-origin.com
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: '0.5'
+#           memory: 256M
+#     restart: always
+

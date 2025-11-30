@@ -1,0 +1,65 @@
+# =============================================================================
+# Fly.io Configuration for TBC Node
+# =============================================================================
+# Deployment:
+#   fly launch --no-deploy
+#   fly secrets set TBC_RPC_URL="https://your-rpc.com"
+#   fly deploy
+#
+# Logs:
+#   fly logs
+#
+# WebSocket URL:
+#   wss://your-app.fly.dev/tgp/ws
+# =============================================================================
+
+app = "tbc-gateway"
+primary_region = "iad"
+
+[build]
+  dockerfile = "docker/Dockerfile.tbc-node"
+
+[env]
+  TBC_CHAIN_ID = "369"
+  TBC_ALLOW_ORIGIN = "*"
+  TBC_LOG_LEVEL = "info"
+  TBC_ID = "tbc-fly"
+  RUST_LOG = "tbc_node=info,tbc_gateway=info"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+  
+  [[services.http_checks]]
+    interval = 10000
+    grace_period = "5s"
+    method = "get"
+    path = "/health"
+    protocol = "http"
+    timeout = 2000
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
+

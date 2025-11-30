@@ -17,6 +17,8 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 uuid = { version = "1", features = ["v4"] }
 anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # internal crates
 tbc-core = { path = "../tbc-core" }

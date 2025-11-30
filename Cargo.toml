@@ -46,7 +46,7 @@ sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "migra
 redis = { version = "0.24", features = ["tokio-comp"] }
 
 # HTTP
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["trace", "cors"] }
 

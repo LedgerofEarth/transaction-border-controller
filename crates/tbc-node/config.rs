@@ -11,6 +11,9 @@ pub struct GatewayConfig {
 
     /// Allow CORS for extension
     pub allow_origin: String,
+    
+    /// TBC instance identifier (for logging/audit)
+    pub tbc_id: Option<String>,
 }
 
 impl GatewayConfig {
@@ -22,6 +25,7 @@ impl GatewayConfig {
             chain_id: 369,
             settle_poll_interval_ms: 1000,
             allow_origin: "*".into(),
+            tbc_id: Some("tbc-primary".into()),
         }
     }
 }

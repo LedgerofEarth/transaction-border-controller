@@ -3,11 +3,11 @@ resolver = "2"
 members = [
     "crates/tbc-core",
     "crates/tbc-gateway",
+    "crates/tbc-cli",
+    "crates/tbc-node",
+    "crates/tbc-sdk",
+    "crates/tbc-service",
     "crates/coreprover-bridge",
-    "crates/coreprover-service",
-    "crates/coreprover-zk",
-    "crates/coreprover-cli",
-    "crates/coreprover-sdk",
 ]
 
 [workspace.package]

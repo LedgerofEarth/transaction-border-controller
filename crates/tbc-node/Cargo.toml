@@ -3,6 +3,10 @@ name = "tbc-node"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "tbc-node"
+path = "main.rs"
+
 [dependencies]
 axum = "0.7"
 serde = { version = "1.0", features = ["derive"] }

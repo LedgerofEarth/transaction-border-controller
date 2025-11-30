@@ -27,9 +27,8 @@ use tbc_core::{
         ReplayProtector,
         InMemoryReplayCache,
         TGPValidationResult,
-        TGPMetadata,
     },
-    protocol::{TGPMessage, make_protocol_error},
+    protocol::{TGPMessage, make_protocol_error, ErrorMessage},
 };
 
 use crate::handlers::{
@@ -78,7 +77,7 @@ impl TGPInboundRouter for InboundRouter {
         let (metadata, message) = match classify_message(raw_json) {
             Ok(pair) => pair,
             Err(e) => {
-                let err = make_protocol_error(None, "INVALID_JSON", e);
+                let err = make_protocol_error(0, "INVALID_JSON", e.to_string());
                 log_err(&err);
                 return Ok(encode_message(&TGPMessage::Error(err))?);
             }
@@ -89,7 +88,7 @@ impl TGPInboundRouter for InboundRouter {
         // ====================================================================
         if !self.replay.check_or_insert(&metadata.msg_id) {
             let err = make_protocol_error(
-                metadata.correlation_id.clone(),
+                0,
                 "REPLAY_DETECTED",
                 format!("Duplicate message ID: {}", metadata.msg_id),
             );
@@ -111,7 +110,7 @@ impl TGPInboundRouter for InboundRouter {
         // ====================================================================
         // 4. DISPATCH TO HANDLERS (stateless, RFC-style)
         // ====================================================================
-        let out_msg = match &message {
+        let out_msg: TGPMessage = match &message {
 
             //----------------------------------------------------------
             // QUERY Handler

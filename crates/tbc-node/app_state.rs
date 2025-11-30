@@ -8,7 +8,7 @@ pub struct AppState {
 }
 
 use crate::config::GatewayConfig;
-use crate::rpc_adapter::RpcAdapter;
+use crate::rpc_adapters::RpcAdapter;
 
 impl AppState {
     pub fn new(cfg: GatewayConfig, rpc: RpcAdapter) -> Self {

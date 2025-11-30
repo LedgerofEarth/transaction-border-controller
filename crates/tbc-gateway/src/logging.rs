@@ -17,8 +17,7 @@ use chrono::{Utc, SecondsFormat};
 use serde_json::json;
 use std::env;
 
-use tbc_core::protocol::ErrorMessage;     // FIXED: correct module path
-use tbc_core::tgp::state::TGPSession;    // for session logging
+use tbc_core::protocol::ErrorMessage;
 
 // ============================================================================
 // Logging Macros
@@ -127,7 +126,7 @@ pub fn log_err(err: &ErrorMessage) {
             "id": err.id,
             "code": err.code,
             "message": err.message,
-            "correlation_id": err.correlation_id
+            "layer_failed": err.layer_failed
         })
     );
 }
@@ -136,16 +135,17 @@ pub fn log_err(err: &ErrorMessage) {
 // Session & Handler Logging
 // ============================================================================
 
-pub fn log_session_created(session: &TGPSession) {
-    info(
-        "session-created",
-        json!({
-            "session_id": session.session_id,
-            "state": format!("{:?}", session.state),
-            "created_at": session.created_at,
-        })
-    );
-}
+// TODO: Re-enable when TGPSession is available
+// pub fn log_session_created(session: &TGPSession) {
+//     info(
+//         "session-created",
+//         json!({
+//             "session_id": session.session_id,
+//             "state": format!("{:?}", session.state),
+//             "created_at": session.created_at,
+//         })
+//     );
+// }
 
 pub fn log_handler(phase: &str) {
     debug("handler-entry", json!({ "phase": phase }));

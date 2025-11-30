@@ -5,19 +5,18 @@
 //! Equivalent to SIP Transaction User layer (TU).
 //!
 //! QUERY  → run state machine → ACK/ERROR
+//! ACK    → passthrough
 //! SETTLE → passthrough
 //! ERROR  → passthrough
 
-use tbc_core::tgp::protocol::{
+use tbc_core::protocol::{
     QueryMessage,
     ErrorMessage,
     AckMessage,
     SettleMessage,
+    TGPMessage,
 };
-use tbc_core::tgp::state::{
-    handle_query, 
-    TGPStateResult,
-};
+use tbc_core::codec_tx::TGPMetadata;
 use anyhow::Result;
 
 
@@ -25,14 +24,25 @@ use anyhow::Result;
 // QUERY → ACK / ERROR
 // ------------------------------------------------------------
 pub async fn handle_inbound_query(
+    _meta: &TGPMetadata,
     q: QueryMessage,
-) -> Result<serde_json::Value> {
+) -> Result<TGPMessage> {
+    // TODO: Implement full state machine when tgp::state is ready
+    // For now, return a simple ACK
+    let ack = AckMessage::offer_for(&q);
+    Ok(TGPMessage::Ack(ack))
+}
 
-    match handle_query(q).await {
-        TGPStateResult::Ack(ack) => Ok(serde_json::to_value(ack)?),
-        TGPStateResult::Error(err) => Ok(serde_json::to_value(err)?),
-        TGPStateResult::Settle(s) => Ok(serde_json::to_value(s)?), // edge case
-    }
+
+// ------------------------------------------------------------
+// ACK passthrough
+// ------------------------------------------------------------
+pub async fn handle_inbound_ack(
+    _meta: &TGPMetadata,
+    a: AckMessage,
+) -> Result<TGPMessage> {
+    // Gateway passes through ACKs
+    Ok(TGPMessage::Ack(a))
 }
 
 
@@ -40,11 +50,11 @@ pub async fn handle_inbound_query(
 // SETTLE passthrough
 // ------------------------------------------------------------
 pub async fn handle_inbound_settle(
+    _meta: &TGPMetadata,
     s: SettleMessage,
-) -> Result<serde_json::Value> {
-
+) -> Result<TGPMessage> {
     // Gateway does NOT modify terminal settlement states
-    Ok(serde_json::to_value(s)?)
+    Ok(TGPMessage::Settle(s))
 }
 
 
@@ -52,8 +62,8 @@ pub async fn handle_inbound_settle(
 // ERROR passthrough
 // ------------------------------------------------------------
 pub async fn handle_inbound_error(
+    _meta: &TGPMetadata,
     e: ErrorMessage,
-) -> Result<serde_json::Value> {
-
-    Ok(serde_json::to_value(e)?)
+) -> Result<TGPMessage> {
+    Ok(TGPMessage::Error(e))
 }

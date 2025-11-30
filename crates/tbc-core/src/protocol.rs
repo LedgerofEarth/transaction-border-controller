@@ -77,7 +77,7 @@ pub struct Intent {
 // 2. Routing Metadata
 // -----------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct RoutingMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_area_id: Option<String>,
@@ -264,6 +264,28 @@ pub struct ErrorMessage {
     pub message: String,
 }
 
+impl ErrorMessage {
+    pub fn new(id: impl Into<String>, code: impl Into<String>, message: impl Into<String>) -> Self {
+        ErrorMessage {
+            msg_type: "ERROR".into(),
+            id: id.into(),
+            code: code.into(),
+            layer_failed: 0,
+            message: message.into(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.msg_type != "ERROR" {
+            return Err("ERROR.type must equal \"ERROR\"".into());
+        }
+        if self.id.is_empty() {
+            return Err("ERROR.id is required".into());
+        }
+        Ok(())
+    }
+}
+
 pub fn make_protocol_error(
     layer: u8,
     code: impl Into<String>,
@@ -316,4 +338,34 @@ impl SettleMessage {
             timestamp: timestamp.into(),
         }
     }
+
+    pub fn validate(&self) -> Result<(), String> {
+        if self.msg_type != "SETTLE" {
+            return Err("SETTLE.type must equal \"SETTLE\"".into());
+        }
+        if self.id.is_empty() {
+            return Err("SETTLE.id is required".into());
+        }
+        Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+// 7. TGP Message Envelope
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum TGPMessage {
+    #[serde(rename = "QUERY")]
+    Query(QueryMessage),
+
+    #[serde(rename = "ACK")]
+    Ack(AckMessage),
+
+    #[serde(rename = "SETTLE")]
+    Settle(SettleMessage),
+
+    #[serde(rename = "ERROR")]
+    Error(ErrorMessage),
 }

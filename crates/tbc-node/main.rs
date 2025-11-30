@@ -1,17 +1,17 @@
 mod app_state;
 mod config;
-mod rpc_adapter;
-mod routes;
+mod rpc_adapters;
+mod routers;
 mod health;
 mod errors;
 
-use axum::Server;
+use tokio::net::TcpListener;
 use tower_http::cors::{CorsLayer, Any};
-use routes::build_routes;
+use routers::build_routes;
 
 use crate::{
     config::GatewayConfig,
-    rpc_adapter::RpcAdapter,
+    rpc_adapters::RpcAdapter,
     app_state::AppState,
 };
 
@@ -33,17 +33,15 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_methods(Any)
         .allow_headers(Any)
-        .allow_origin(cfg.allow_origin.parse().unwrap());
+        .allow_origin(cfg.allow_origin.parse::<axum::http::HeaderValue>().unwrap());
 
     let app = build_routes(state).layer(cors);
 
     println!("📡 Listening on {}", cfg.listen_addr);
 
     // ------------------------------------------------------
-    // Run node
+    // Run node (axum 0.7 style)
     // ------------------------------------------------------
-    Server::bind(&cfg.listen_addr.parse().unwrap())
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = TcpListener::bind(&cfg.listen_addr).await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }

@@ -1,19 +1,26 @@
 # =============================================================================
 # Fly.io Configuration for TBC Node
 # =============================================================================
+# 
+# Custom Domain: tbc.coreprove.com
+# 
 # Deployment:
-#   fly launch --no-deploy
-#   fly secrets set TBC_RPC_URL="https://your-rpc.com"
-#   fly deploy
+#   1. fly launch --no-deploy (first time only)
+#   2. fly secrets set TBC_RPC_URL="https://rpc.pulsechain.com"
+#   3. fly deploy
+#   4. fly certs add tbc.coreprove.com
+#   5. Add CNAME record in GoDaddy: tbc → coreprove-tbc.fly.dev
 #
-# Logs:
-#   fly logs
+# Verify:
+#   fly status
+#   fly certs show tbc.coreprove.com
+#   curl https://tbc.coreprove.com/health
 #
 # WebSocket URL:
-#   wss://your-app.fly.dev/tgp/ws
+#   wss://tbc.coreprove.com/tgp/ws
 # =============================================================================
 
-app = "tbc-gateway"
+app = "coreprove-tbc"
 primary_region = "iad"
 
 [build]
@@ -21,9 +28,10 @@ primary_region = "iad"
 
 [env]
   TBC_CHAIN_ID = "369"
-  TBC_ALLOW_ORIGIN = "*"
+  TBC_ALLOW_ORIGIN = "https://coreprove.com,https://tbc.coreprove.com,chrome-extension://*"
   TBC_LOG_LEVEL = "info"
-  TBC_ID = "tbc-fly"
+  TBC_ID = "tbc-coreprove-prod"
+  TBC_WS_PATH = "/tgp/ws"
   RUST_LOG = "tbc_node=info,tbc_gateway=info"
 
 [http_service]

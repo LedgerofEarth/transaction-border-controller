@@ -1,10 +1,15 @@
-📗 TGP-EXT-00 v1.1 — Transaction Gateway Protocol: Extension Runtime
+📗 TGP-EXT-00 v1.2 — Transaction Gateway Protocol: Extension Runtime
 
-Version: 1.1
+Version: 1.2
 Status: Draft (internal)
 Author: Ledger of Earth
 Audience: Browser extension developers, wallet developers, agent-framework implementers
 Scope: Defines the browser-resident runtime that implements TGP-CP-00 securely, safely, and compatibly with Chrome MV3, Firefox, Brave, Edge, and Safari.
+
+Related Specifications:
+- DKW-00 v0.5 — Delegated Key Wallet Specification
+- TGP-00 v3.2 — Transaction Gateway Protocol
+- TGP-EXT-ZK-00 — Zero-Knowledge Proof Envelope Specification
 
 ⸻
 
@@ -169,29 +174,85 @@ Wallets remain blind signers.
 
 ⸻
 
-7. TGP Presence API (Wallet-Detected Signal)
+7. Delegated Key Intent (DKI) — New in v1.2
+
+The extension supports delegated signing via EIP-712 wallet authorization.
+See DKW-00 v0.5 for full specification.
+
+7.1 DKI Flow Summary
+
+1. Merchant calls `window.tgp.requestPayment()`
+2. Extension presents economic data to user
+3. Extension requests EIP-712 signature from wallet (DKI)
+4. User approves in wallet → delegation granted
+5. Extension sends TGP_QUERY to TBC
+6. TBC responds with ACK-ALLOWED
+7. Extension submits delegated transaction
+
+7.2 Wallet Interaction
+
+The extension MUST:
+- Present clear economic data before requesting signature
+- Use standard `eth_signTypedData_v4` method
+- Validate chain ID matches
+- Respect user rejection without retry
+
+The extension MUST NOT:
+- Request delegation without user-initiated action
+- Store wallet private keys
+- Bypass wallet UI for delegation
+
+7.3 Delegation Scope
+
+DKI delegations are constrained by:
+- Maximum value (wei)
+- Specific merchant (or any)
+- Specific chain ID
+- Expiry timestamp (max 24 hours)
+- Nonce (replay protection)
+
+7.4 Stored Delegations
+
+Delegations are stored in `chrome.storage.local`:
+- Key: `cp_delegations`
+- Max entries: 100
+- Auto-expiry on: timeout, value exceeded, new delegation
+
+7.5 Message Types
+
+Background script handles:
+- `DKI_INITIATE` — Start delegation flow
+- `DKI_GET_STATE` — Query current state
+- `DKI_SUBMIT_TX` — Submit with delegation
+- `DKI_CHECK_DELEGATION` — Check existing
+- `DKI_RESET` — Cancel flow
+
+⸻
+
+8. TGP Presence API (Wallet-Detected Signal)
 
 The extension MUST expose a presence flag detectable by wallets.
 
-7.1 window.tgp Injection
+8.1 window.tgp Injection
 
 window.tgp = {
-  version: “1.1”,
+  version: "1.2",
   active: true,
-  tbc: { reachable: true | false }
+  tbc: { reachable: true | false },
+  dki: { supported: true }  // New in v1.2
 };
 
-7.2 Presence Event
+8.2 Presence Event
 
 document.dispatchEvent(
-  new CustomEvent(“tgp:present”, {
-    detail: { version: “1.1”, reachable: true | false }
+  new CustomEvent("tgp:present", {
+    detail: { version: "1.2", reachable: true | false }
   })
 );
 
 Wallets MAY subscribe to detect TGP availability.
 
-7.3 Security Constraints
+8.3 Security Constraints
 
 Presence API MUST NOT expose:
 	•	Gateway URL
@@ -202,7 +263,7 @@ Presence API MUST NOT expose:
 
 ⸻
 
-8. Security Requirements
+9. Security Requirements
 
 The extension MUST NOT:
 	•	Request seed phrases
@@ -218,7 +279,7 @@ The extension MUST:
 
 ⸻
 
-9. Browser Compliance
+10. Browser Compliance
 
 Chrome MV3
 	•	Service worker required
@@ -234,7 +295,7 @@ Safari
 
 ⸻
 
-10. Compliance Tests
+11. Compliance Tests
 
 A compliant extension MUST pass:
 	1.	Presence API test
@@ -248,9 +309,9 @@ A compliant extension MUST pass:
 
 ⸻
 
-11. ERROR Handling (New in v1.1)
+12. ERROR Handling (New in v1.1)
 
-11.1 ERROR Notification
+12.1 ERROR Notification
 
 When receiving a TGP ERROR, the extension MUST:
 	•	Display a visible notification
@@ -260,7 +321,7 @@ When receiving a TGP ERROR, the extension MUST:
 
 It MUST NOT auto-retry or suppress the error.
 
-11.2 Session Abort
+12.2 Session Abort
 
 Upon ERROR:
 	•	Mark session as failed
@@ -269,11 +330,11 @@ Upon ERROR:
 
 ⸻
 
-12. Escrow Monitoring (New in v1.1)
+13. Escrow Monitoring (New in v1.1)
 
 The extension maintains minimal local escrow state.
 
-12.1 Escrow Record
+13.1 Escrow Record
 
 Stored per active escrow:
 	•	escrow_id
@@ -283,7 +344,7 @@ Stored per active escrow:
 	•	party_role
 	•	next_verb
 
-12.2 TTL Monitoring
+13.2 TTL Monitoring
 
 The extension MUST:
 	•	Compute time_remaining
@@ -294,7 +355,7 @@ MUST NOT:
 	•	Poll blockchain aggressively
 	•	Trigger automatic withdrawal
 
-12.3 SETTLE Handling
+13.3 SETTLE Handling
 
 When a Gateway emits SETTLE:
 	•	Escrow finalizes
@@ -303,23 +364,23 @@ When a Gateway emits SETTLE:
 
 ⸻
 
-13. WITHDRAW Eligibility & Initiation (New in v1.1)
+14. WITHDRAW Eligibility & Initiation (New in v1.1)
 
-13.1 L6 Eligibility Detection
+14.1 L6 Eligibility Detection
 
 WITHDRAW eligible when:
 	•	Buyer: state = PENDING & TTL expired
 	•	Seller: state = ACCEPTED & TTL expired
 	•	Cooperative: both parties submit release intent (future optional)
 
-13.2 User Notification
+14.2 User Notification
 
 When eligible:
 	•	Notify: “Withdrawal available”
 	•	Update badge
 	•	Enable WITHDRAW button in popup
 
-13.3 WITHDRAW Action
+14.3 WITHDRAW Action
 
 Upon confirmation, extension MUST construct:
 
@@ -335,9 +396,9 @@ ACK MUST be followed exactly.
 
 ⸻
 
-14. Multi-Verb State Display (New in v1.1)
+15. Multi-Verb State Display (New in v1.1)
 
-14.1 Badge States
+15.1 Badge States
 
 Color	Meaning
 Gray	Idle
@@ -346,7 +407,7 @@ Yellow	ACCEPTED
 Green	CLAIMED/RELEASED
 Red	ERROR/REFUNDED
 
-14.2 Popup Escrow Panel
+15.2 Popup Escrow Panel
 
 Popup MUST show:
 	•	Current escrow state
@@ -362,4 +423,4 @@ Popup MUST NOT expose:
 
 ⸻
 
-End of TGP-EXT-00 v1.1
+End of TGP-EXT-00 v1.2

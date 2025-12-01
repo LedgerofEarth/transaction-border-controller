@@ -16,6 +16,11 @@ thiserror = "1.0"
 log = "0.4"
 uuid = { version = "1.8", features = ["v4"] }
 
+# Contract types and ZK proofs
+sha3 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+
 [[bench]]
 name = "replay_bench"
 harness = false

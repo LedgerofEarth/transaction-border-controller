@@ -1,9 +1,14 @@
 <p align=“center”>
-  <img src=“docs/diagrams/tbc-zk-overview.png” alt=“TBC Zero Knowledge Transaction Overview” width=“100%”>
+  <img
+    src=“docs/diagrams/tbc-zk-overview.png”
+    alt=“Zero Knowledge Transaction Overview for the Transaction Border Controller”
+    width=“100%”
+    style=“max-width: 900px;”
+  />
 </p>
 
 <h1 align=“center”>Transaction Border Controller (TBC)</h1>
-<h3 align=“center”>Secure ZK-Aware Gateway for Trusted Commerce</h3>
+<h3 align=“center”>A Secure, ZK-Aware Gateway for Trusted Digital Commerce</h3>
 
 
 🌐 Transaction Border Controller (TBC)

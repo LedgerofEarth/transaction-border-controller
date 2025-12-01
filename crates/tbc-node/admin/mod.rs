@@ -13,5 +13,5 @@ pub mod routes;
 
 pub use auth::{AdminAuth, AdminKeyStore};
 pub use commands::AdminCommand;
-pub use routes::build_admin_routes;
+pub use routes::{build_admin_routes, run_admin_command, AdminState};
 

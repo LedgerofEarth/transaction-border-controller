@@ -1,0 +1,253 @@
+.
+├── .anthropic
+│   ├── goals.md
+│   └── project.yaml
+├── .devcontainer
+│   └── devcontainer.json
+├── .gitignore
+├── 11-26-Scrum.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── Cargo.lock
+├── Cargo.toml
+├── CoreProve-Design.002.png
+├── LICENSE
+├── Makefile.make
+├── README.md
+├── SECURITY.md
+├── crates
+│   ├── coreprover-bridge
+│   │   ├── Cargo.toml
+│   │   └── src
+│   │       ├── lib.rs
+│   │       └── types.rs
+│   ├── tbc-cli
+│   │   ├── Cargo.toml
+│   │   ├── README
+│   │   └── src
+│   │       ├── commands
+│   │       │   ├── escrow.rs
+│   │       │   ├── mod.rs
+│   │       │   ├── monitor.rs
+│   │       │   └── remote.rs
+│   │       ├── config.rs
+│   │       └── main.rs
+│   ├── tbc-core
+│   │   ├── Cargo.toml
+│   │   ├── README
+│   │   ├── benches
+│   │   │   ├── codec_load_bench.rs
+│   │   │   ├── replay_bench.rs
+│   │   │   └── sample_query.json
+│   │   └── src
+│   │       ├── codec_tx.rs
+│   │       ├── contracts
+│   │       │   ├── factory.rs
+│   │       │   ├── mod.rs
+│   │       │   ├── receipt_vault.rs
+│   │       │   ├── settlement.rs
+│   │       │   └── types.rs
+│   │       ├── lib.rs
+│   │       ├── protocol.rs
+│   │       ├── tgp
+│   │       │   ├── messages.rs
+│   │       │   ├── mod.rs
+│   │       │   ├── state.rs
+│   │       │   ├── types.rs
+│   │       │   └── validation.rs
+│   │       └── zk
+│   │           ├── errors.rs
+│   │           ├── inputs.rs
+│   │           ├── mod.rs
+│   │           ├── proofs.rs
+│   │           └── verifier.rs
+│   ├── tbc-gateway
+│   │   ├── Cargo.toml
+│   │   ├── README
+│   │   ├── src
+│   │   │   ├── handlers
+│   │   │   │   ├── mod.rs
+│   │   │   │   ├── tgp_ack_handlers.rs
+│   │   │   │   ├── tgp_error_handler.rs
+│   │   │   │   ├── tgp_query_handler.rs
+│   │   │   │   └── tgp_settle_handler.rs
+│   │   │   ├── lib.rs
+│   │   │   ├── logging.rs
+│   │   │   ├── rewriter.rs
+│   │   │   ├── router
+│   │   │   │   ├── inbound.rs
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── tgp_routes.rs
+│   │   │   ├── settlement
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── tx_builders.rs
+│   │   │   ├── signing
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── tbc_signer.rs
+│   │   │   ├── types.rs
+│   │   │   ├── validation.rs
+│   │   │   ├── workers
+│   │   │   │   ├── mod.rs
+│   │   │   │   └── session_cleanup.rs
+│   │   │   └── ws
+│   │   │       ├── envelope.rs
+│   │   │       ├── handler.rs
+│   │   │       ├── mod.rs
+│   │   │       ├── router.rs
+│   │   │       └── state.rs
+│   │   └── tests
+│   │       └── session_lifecycle_tests.rs
+│   ├── tbc-node
+│   │   ├── Cargo.toml
+│   │   ├── admin
+│   │   │   ├── auth.rs
+│   │   │   ├── commands.rs
+│   │   │   ├── mod.rs
+│   │   │   └── routes.rs
+│   │   ├── app_state.rs
+│   │   ├── config.rs
+│   │   ├── errors.rs
+│   │   ├── health.rs
+│   │   ├── main.rs
+│   │   ├── routers.rs
+│   │   └── rpc_adapters.rs
+│   ├── tbc-sdk
+│   │   ├── Cargo.toml
+│   │   ├── README
+│   │   ├── examples
+│   │   │   ├── digital_goods
+│   │   │   ├── physical_goods
+│   │   │   └── pizza_delivery
+│   │   └── src
+│   │       ├── builder
+│   │       │   ├── escrow_builder.rs
+│   │       │   └── mod.rs
+│   │       ├── client.rs
+│   │       └── lib.rs
+│   └── tbc-service
+│       ├── Cargo.toml
+│       ├── README
+│       ├── config
+│       │   └── default
+│       ├── migrations
+│       │   └── 001_initial_schema
+│       └── src
+│           ├── api
+│           │   ├── handlers.rs
+│           │   ├── mod.rs
+│           │   └── routes.rs
+│           ├── engine.rs
+│           ├── lib.rs
+│           ├── main.rs
+│           ├── profiles
+│           │   ├── mod.rs
+│           │   └── templates.rs
+│           ├── settlement
+│           │   ├── engine.rs
+│           │   ├── mod.rs
+│           │   └── monitor.rs
+│           ├── types.rs
+│           └── workers
+│               ├── indexer_worker.rs
+│               ├── mod.rs
+│               └── timeout_worker.rs
+├── docker
+│   ├── .dockerignore
+│   ├── Dockerfile.cli
+│   ├── Dockerfile.service
+│   ├── Dockerfile.tbc-node
+│   ├── docker-compose.dev.yml
+│   ├── docker-compose.tbc.yml
+│   └── docker-compose.yml
+├── docs
+│   ├── README.md
+│   ├── Rebuild.md
+│   ├── TBC Design.key
+│   ├── architecture.md
+│   ├── context_summary.md
+│   ├── diagrams
+│   │   ├── TBC Design.001.png
+│   │   ├── TBC Design.002.png
+│   │   ├── TBC Design.003.png
+│   │   └── TBC Design.004.png
+│   ├── docs
+│   │   ├── 7daysprint#1.md
+│   │   ├── Architecture-drawing.md
+│   │   ├── CLI
+│   │   └── MSG-Flows.md
+│   ├── guides
+│   │   ├── deployment.md
+│   │   ├── integration.md
+│   │   └── quickstart.md
+│   ├── roadmap.md
+│   ├── scrum
+│   │   └── 11-28-2025
+│   ├── specs
+│   │   ├── DKW-00.md
+│   │   ├── LICENSE.txt
+│   │   ├── TGP-0.v3.2.md
+│   │   ├── TGP-CP-00.md
+│   │   ├── TGP-EX-00.md
+│   │   ├── TGP-EX-00v1.2.md
+│   │   ├── TGP-EXT-ZK_schemas.md
+│   │   ├── TGP-TBC-SEC-00.md
+│   │   ├── appendices
+│   │   │   ├── README.md
+│   │   │   ├── TGP-01-ECONOMIC-ENVELOPE-EXT.md
+│   │   │   ├── TGP-Appendix-A-TAI
+│   │   │   ├── TGP-Appendix-C-ZK-BUYER.md
+│   │   │   ├── TGP-Appendix-D-ZKS.md
+│   │   │   ├── TGP-Appendix-E-ZK-BS.md
+│   │   │   ├── TGP-Appendix-F-ZKX.md
+│   │   │   ├── TGP-Appendix-G-ZK-RECEIPT.md
+│   │   │   ├── TGP-POS-00.md
+│   │   │   ├── ZKB-01-PROOF.md
+│   │   │   └── ZKS-01-PROOF.md
+│   │   └── crossrefs
+│   │       ├── CoreProve-00.md
+│   │       └── CoreProve-ZK-00.md
+│   └── system_topology.md
+├── examples
+│   ├── rest-api-client
+│   │   ├── Cargo.toml
+│   │   └── src
+│   │       └── main.rs
+│   └── simple-integration
+│       ├── Cargo.toml
+│       └── src
+│           └── main.rs
+├── fly.toml
+├── railway.json
+├── repo_tree.txt
+├── scripts
+│   ├── cheatsheet.md
+│   ├── deploy-testnet
+│   ├── generate-bindings
+│   └── setup-dev
+└── tests
+    ├── controller_smoke.rs
+    ├── e2e
+    │   ├── test_full_flow.rs
+    │   └── test_timeout.rs
+    ├── harness
+    │   ├── baseline.rs
+    │   ├── context.rs
+    │   ├── engine_driver.rs
+    │   ├── engine_factory.rs
+    │   ├── fault.rs
+    │   ├── harness.rs
+    │   ├── mock_chain.rs
+    │   ├── mod.rs
+    │   ├── model_checker.rs
+    │   ├── scenarios.rs
+    │   ├── stress.rs
+    │   ├── time.rs
+    │   ├── trace.rs
+    │   ├── types.rs
+    │   └── zk_analyzer.rs
+    ├── integration_prover_flows.rs
+    ├── integration_tests.rs
+    ├── integration_tgp_routing.rs
+    └── state_transition_matrix.rs
+
+56 directories, 195 files

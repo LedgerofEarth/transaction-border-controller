@@ -110,7 +110,7 @@ async fn execute_command(
     }
 
     // Execute command
-    let result = execute(&state, &admin, cmd).await;
+    let result = run_admin_command(&state, &admin, cmd).await;
     
     let status = if result.success {
         StatusCode::OK
@@ -121,8 +121,8 @@ async fn execute_command(
     (status, Json(result))
 }
 
-/// Execute a specific admin command
-async fn execute(
+/// Execute a specific admin command (public)
+pub async fn run_admin_command(
     state: &AdminState,
     admin: &super::auth::AdminEntry,
     cmd: AdminCommand,

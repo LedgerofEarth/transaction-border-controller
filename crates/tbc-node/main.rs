@@ -1,12 +1,11 @@
+mod admin;
 mod app_state;
 mod config;
 mod rpc_adapters;
 mod routers;
 mod health;
 mod errors;
-mod admin;
 
-use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{CorsLayer, Any};
 use routers::build_routes;
@@ -16,7 +15,6 @@ use crate::{
     config::GatewayConfig,
     rpc_adapters::RpcAdapter,
     app_state::AppState,
-    admin::routes::{AdminState, build_admin_routes},
 };
 
 #[tokio::main]
@@ -49,10 +47,10 @@ async fn main() {
     // Startup banner
     // ------------------------------------------------------
     println!();
-    println!("==================================================");
-    println!("  TBC - Transaction Border Controller");
-    println!("  TGP-00 v3.2 Security Gateway");
-    println!("==================================================");
+    println!("╔═══════════════════════════════════════════╗");
+    println!("║  🛡️  Transaction Border Controller (TBC)  ║");
+    println!("║     TGP-00 v3.2 Security Gateway          ║");
+    println!("╚═══════════════════════════════════════════╝");
     println!();
     
     cfg.print_summary();
@@ -65,19 +63,6 @@ async fn main() {
     let state = AppState::new(cfg.clone(), rpc);
 
     // ------------------------------------------------------
-    // Initialize admin state
-    // ------------------------------------------------------
-    let admin_state = Arc::new(AdminState::new(cfg.clone()));
-    
-    // Check for admin keys
-    let admin_count = admin_state.auth.key_store().list_admins().len();
-    if admin_count > 0 {
-        println!("Admin API: {} authorized keys loaded", admin_count);
-    } else {
-        println!("Admin API: No admin keys configured (set TBC_ADMIN_KEYS)");
-    }
-
-    // ------------------------------------------------------
     // Build Axum router with CORS
     // ------------------------------------------------------
     let cors = CorsLayer::new()
@@ -85,13 +70,14 @@ async fn main() {
         .allow_headers(Any)
         .allow_origin(cfg.allow_origin.parse::<axum::http::HeaderValue>().unwrap());
 
-    // Merge TGP routes with admin routes
-    let tgp_routes = build_routes(state);
-    let admin_routes = build_admin_routes(admin_state);
-    
-    let app = tgp_routes
-        .merge(admin_routes)
-        .layer(cors);
+    let app = build_routes(state).layer(cors);
+
+    // ------------------------------------------------------
+    // Check admin keys
+    // ------------------------------------------------------
+    let admin_keys_count = std::env::var("TBC_ADMIN_KEYS")
+        .map(|s| s.split(',').filter(|e| !e.trim().is_empty()).count())
+        .unwrap_or(0);
 
     // ------------------------------------------------------
     // Bind and serve
@@ -100,17 +86,16 @@ async fn main() {
         listen_addr = %cfg.listen_addr,
         tbc_id = ?cfg.tbc_id,
         chain_id = cfg.chain_id,
-        admin_keys = admin_count,
+        admin_keys = admin_keys_count,
         "TBC Gateway starting"
     );
     
-    println!();
-    println!("Listening on http://{}", cfg.listen_addr);
-    println!("  POST /tgp        - TGP messages (HTTP)");
-    println!("  GET  /tgp/ws     - TGP messages (WebSocket)");
-    println!("  GET  /health     - Health check");
-    println!("  POST /admin/exec - Admin commands (authenticated)");
-    println!("  GET  /admin/health - Admin health (public)");
+    println!("📡 Listening on http://{}", cfg.listen_addr);
+    println!("   POST /tgp        → TGP messages (HTTP)");
+    println!("   GET  /tgp/ws     → TGP messages (WebSocket)");
+    println!("   GET  /health     → Health check");
+    println!("   POST /admin/exec → Admin commands (authenticated)");
+    println!("   GET  /admin/health → Admin health (public)");
     println!();
 
     let listener = TcpListener::bind(&cfg.listen_addr).await.expect("Failed to bind to address");

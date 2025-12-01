@@ -4,11 +4,17 @@ use axum::{
     Extension,
     routing::{post, get},
     extract::State,
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
 };
+use serde_json::json;
 
 use crate::{
     app_state::AppState,
     health::health_check,
+    admin::auth::SignedRequest,
+    admin::commands::{AdminCommand, CommandResult},
 };
 use tbc_gateway::{InboundRouter, TGPInboundRouter, WsState};
 
@@ -17,6 +23,14 @@ pub fn build_routes(state: AppState) -> Router {
     let ws_state = Arc::new(WsState {
         tbc_id: state.cfg.tbc_id.clone().unwrap_or_else(|| "tbc-default".to_string()),
     });
+    
+    // Log admin key status
+    let admin_count = state.admin.auth.key_store().list_admins().len();
+    if admin_count > 0 {
+        tracing::info!("Admin API: {} admin keys loaded", admin_count);
+    } else {
+        println!("Admin API: No admin keys configured (set TBC_ADMIN_KEYS)");
+    }
     
     Router::new()
         .route("/health", get(health_check))
@@ -28,6 +42,12 @@ pub fn build_routes(state: AppState) -> Router {
         // ---------------------------------------------------
         .route("/tgp", post(tgp_inbound))
         .route("/tgp/ws", get(ws_handler))
+        
+        // ---------------------------------------------------
+        // Admin routes (Ed25519 authenticated)
+        // ---------------------------------------------------
+        .route("/admin/health", get(admin_health))
+        .route("/admin/exec", post(admin_exec))
 
         .layer(Extension(ws_state))
         .with_state(state)
@@ -56,4 +76,82 @@ async fn ws_handler(
     ws: axum::extract::ws::WebSocketUpgrade,
 ) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |socket| tbc_gateway::ws::handler::handle_ws_public(socket, ws_state))
+}
+
+/// Public admin health endpoint (no auth required)
+async fn admin_health(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let uptime = state.admin.start_time.elapsed().as_secs();
+    let admin_count = state.admin.auth.key_store().list_admins().len();
+    
+    Json(json!({
+        "status": "ok",
+        "service": "tbc-admin",
+        "uptime_seconds": uptime,
+        "tbc_id": state.cfg.tbc_id,
+        "admin_keys_loaded": admin_count,
+    }))
+}
+
+/// Execute authenticated admin command
+async fn admin_exec(
+    State(state): State<AppState>,
+    Json(request): Json<SignedRequest>,
+) -> impl IntoResponse {
+    // Verify authentication
+    let admin = match state.admin.auth.verify_request(&request) {
+        Ok(admin) => admin,
+        Err(e) => {
+            tracing::warn!(
+                pubkey = %request.public_key,
+                command = %request.command,
+                error = %e,
+                "Admin auth failed"
+            );
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(CommandResult::err(&request.command, format!("Auth failed: {}", e))),
+            );
+        }
+    };
+
+    // Parse command
+    let cmd: AdminCommand = match serde_json::from_value(json!({
+        "cmd": request.command,
+        "args": request.args,
+    })) {
+        Ok(cmd) => cmd,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(CommandResult::err(&request.command, format!("Invalid command: {}", e))),
+            );
+        }
+    };
+
+    // Check role
+    if let Err(e) = state.admin.auth.check_role(&admin, cmd.required_role()) {
+        tracing::warn!(
+            admin = %admin.name,
+            command = %request.command,
+            error = %e,
+            "Admin permission denied"
+        );
+        return (
+            StatusCode::FORBIDDEN,
+            Json(CommandResult::err(&request.command, e.to_string())),
+        );
+    }
+
+    // Execute command
+    let result = crate::admin::run_admin_command(&state.admin, &admin, cmd).await;
+    
+    let status = if result.success {
+        StatusCode::OK
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+
+    (status, Json(result))
 }

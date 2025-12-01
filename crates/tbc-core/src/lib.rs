@@ -1,12 +1,22 @@
 //! TBC Core - Gateway Protocol Implementation
 //!
 //! This crate provides core types and traits for the Transaction Border Controller.
+//!
+//! # Modules
+//!
+//! - `protocol` - TGP message types and protocol logic
+//! - `tgp` - TGP session management and validation
+//! - `codec_tx` - Transaction encoding/decoding
+//! - `contracts` - Solidity contract type mirrors
+//! - `zk` - Zero-knowledge proof types (TGP-EXT-ZK-00)
 
 // Gateway module is in tbc-gateway crate, not here
 
 pub mod protocol;
 pub mod tgp;
 pub mod codec_tx;
+pub mod contracts;
+pub mod zk;
 
 // pub use gateway::Gateway;
 // pub use types::*;

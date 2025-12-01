@@ -44,6 +44,11 @@ pub fn build_routes(state: AppState) -> Router {
         .route("/tgp/ws", get(ws_handler))
         
         // ---------------------------------------------------
+        // Public status (no auth - for evaluators)
+        // ---------------------------------------------------
+        .route("/status", get(public_status))
+        
+        // ---------------------------------------------------
         // Admin routes (Ed25519 authenticated)
         // ---------------------------------------------------
         .route("/admin/health", get(admin_health))
@@ -76,6 +81,54 @@ async fn ws_handler(
     ws: axum::extract::ws::WebSocketUpgrade,
 ) -> impl axum::response::IntoResponse {
     ws.on_upgrade(move |socket| tbc_gateway::ws::handler::handle_ws_public(socket, ws_state))
+}
+
+/// Public status endpoint (no auth - for evaluators/demos)
+async fn public_status(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let uptime = state.admin.start_time.elapsed().as_secs();
+    
+    // Build supported chains list (currently single, but architecture supports multi)
+    let primary_chain = state.cfg.chain_id;
+    let chains: Vec<serde_json::Value> = vec![
+        json!({ "id": 1, "name": "Ethereum", "status": if primary_chain == 1 { "active" } else { "available" } }),
+        json!({ "id": 369, "name": "PulseChain", "status": if primary_chain == 369 { "active" } else { "available" } }),
+        json!({ "id": 8453, "name": "Base", "status": "coming_soon" }),
+        json!({ "id": 42161, "name": "Arbitrum", "status": "coming_soon" }),
+    ];
+    
+    Json(json!({
+        "service": "CoreProve TBC",
+        "version": "0.1.0",
+        "protocol": "TGP-00 v3.2",
+        "status": "operational",
+        "uptime_seconds": uptime,
+        "region": std::env::var("FLY_REGION").unwrap_or_else(|_| "unknown".into()),
+        "architecture": "multi-chain",
+        "primary_chain": {
+            "id": primary_chain,
+            "name": match primary_chain {
+                1 => "Ethereum",
+                369 => "PulseChain",
+                8453 => "Base",
+                42161 => "Arbitrum",
+                _ => "Unknown"
+            }
+        },
+        "supported_chains": chains,
+        "security": {
+            "layers": ["L1-Registry", "L2-Signature", "L3-Bytecode", "L4-ZK", "L5-Policy"],
+            "mode": "fail-closed"
+        },
+        "endpoints": {
+            "health": "/health",
+            "status": "/status",
+            "tgp_http": "/tgp",
+            "tgp_ws": "/tgp/ws"
+        },
+        "docs": "https://docs.coreprove.com/tbc"
+    }))
 }
 
 /// Public admin health endpoint (no auth required)
